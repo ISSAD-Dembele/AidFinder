@@ -2,3 +2,11 @@ from .utilisateurs import Utilisateur
 from .administrateur import Administrateur
 from .categorie_aide import CategorieAide
 from .source_aide import SourceAide
+from .aides import Aides
+from .historique import Historique
+from .discussion import Discussion
+from .notification import Notification
+from .action_moderation import ActionModeration
+from .resultat_chat import ResultatChatbot
+from .document_requis import DocumentRequis
+from .export_pdf import ExportPDF

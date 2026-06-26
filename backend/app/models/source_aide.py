@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from app.database.database import Base
 
 class SourceAide(Base):
@@ -10,3 +11,6 @@ class SourceAide(Base):
     type_source = Column(String)
     est_fiable = Column(Boolean, default=True)
     derniere_collecte = Column(DateTime)
+    
+    #les relations avec les autres tables
+    aides = relationship("Aides", back_populates="source")

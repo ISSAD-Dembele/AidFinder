@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.orm import relationship
 from app.database.database import Base
 
 class Utilisateur(Base):
@@ -17,3 +18,11 @@ class Utilisateur(Base):
     situation_handicap = Column(Boolean, default=False)
     date_creation = Column(DateTime)
     date_desactivation = Column(DateTime, nullable=True)
+    
+    #les relations avec les autres tables
+    historiques = relationship("Historique", back_populates="utilisateur", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="utilisateur", cascade="all, delete-orphan")
+    
+    actions_moderation = relationship("ActionModeration", back_populates="utilisateur")
+    administrateur = relationship("Administrateur", back_populates="utilisateur", uselist=False)
+    exports_pdf = relationship("ExportPDF", back_populates="utilisateur")
