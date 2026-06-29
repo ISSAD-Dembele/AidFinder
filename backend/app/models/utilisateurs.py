@@ -8,7 +8,7 @@ class Utilisateur(Base):
     user_id = Column(Integer, primary_key=True, index=True)
     nom = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
-    mot_de_passe = Column(String, nullable=False)
+    mot_de_passe_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)
     statut_compte = Column(String, nullable=False)
     date_naissance = Column(DateTime)
