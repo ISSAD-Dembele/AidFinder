@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from app.core.securite import get_current_user
+from app.models.utilisateurs import Utilisateur
 
-from app.database.database import get_db
-from app.schemas.utilisateur import (UserCreate, UserLogin, UserReponse, Token)
+from app.database.session import get_db
+from app.schemas.utilisateur import (UserCreate, UserLogin, UserReponse, Token, MessageResponse)
 
-from app.services.auth_service import(register_user, login_user)
+from app.services.auth_service import(register_user, login_user, deactivate_user)
 
 router = APIRouter(
     prefix ="/auth",
@@ -24,3 +26,10 @@ def login(
     db:Session = Depends(get_db)
 ):
     return login_user(db, user)
+
+@router.patch("/deactivate", response_model=MessageResponse)
+def deactivate(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return deactivate_user(db, current_user)

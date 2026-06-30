@@ -1,13 +1,16 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
 from passlib.context import CryptContext #gestionnaire de hashage de mot de passe
+from fastapi.security import OAuth2PasswordBearer
 
-from app.core.config import settings
+from app.core.config import(SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES)
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models.utilisateurs import Utilisateur
+from app.database.session import get_db
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
@@ -20,14 +23,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def decode_access_token(token: str):
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         raise HTTPException(
@@ -35,7 +38,7 @@ def decode_access_token(token: str):
             detail="Token d'accès invalide où expiré."
         )
 
-def get_current_user(token: str, db: Session):
+def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(get_db)):
     payload = decode_access_token(token)
     user_id = payload.get("sub")
     if user_id is None:
@@ -46,7 +49,7 @@ def get_current_user(token: str, db: Session):
         
     # Récupérer l'utilisateur à partir de la base de données
     
-    stmt = select(Utilisateur).where(Utilisateur.id == int(user_id))
+    stmt = select(Utilisateur).where(Utilisateur.user_id == int(user_id))
     user = db.execute(stmt).scalar_one_or_none()
     if user is None:
         raise HTTPException(

@@ -46,6 +46,11 @@ def login_user(db: Session, user: UserLogin):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect"
         )
+    if bd_user.statut_compte == "desactive":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ce compte est désactivé"
+        )
     # Vérifiez le mot de passe
     if not verify_password(user.password, bd_user.mot_de_passe_hash):
         raise HTTPException(
@@ -59,3 +64,17 @@ def login_user(db: Session, user: UserLogin):
         "access_token":access_token,
         "token_type":"bearer"
     }
+
+def deactivate_user(db: Session, current_user: Utilisateur):
+    if current_user.statut_compte =="desactive":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce compte est déjà désactivé"
+        )
+    current_user.statut_compte = "desactive"
+    current_user.date_desactivation = datetime.now(timezone.utc)
+        
+    db.commit()
+    db.refresh(current_user)
+        
+    return {"message": "Compte désactivé avec succès"}

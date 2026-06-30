@@ -12,13 +12,16 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class MessageResponse(BaseModel):
+    message: str
+    
 class UserReponse(BaseModel):
     user_id: int
     nom: str
     email: EmailStr
     role: str
     statut_compte: str
-    date_naissance: datetime
+    date_naissance: datetime | None=None
     date_creation: datetime
     model_config = ConfigDict(from_attributes=True)
     
