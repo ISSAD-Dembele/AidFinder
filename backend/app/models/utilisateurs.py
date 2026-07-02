@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
@@ -11,11 +11,12 @@ class Utilisateur(Base):
     mot_de_passe_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)
     statut_compte = Column(String, nullable=False)  # actif | desactive_utilisateur | suspendu_admin
-    date_naissance = Column(DateTime)
+    date_naissance = Column(Date)
     region = Column(String)
     niveau_etude = Column(String)
     statut_socio_pro = Column(String)
     situation_handicap = Column(Boolean, default=False)
+    photo_profil = Column(String, nullable=True)
     date_creation = Column(DateTime)
     date_desactivation = Column(DateTime, nullable=True)
     
