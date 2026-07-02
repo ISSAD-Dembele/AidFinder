@@ -75,7 +75,17 @@ backend/
 |---------|--------------------|--------------------------|------|
 | POST    | `/auth/register`   | Inscription utilisateur  | Non  |
 | POST    | `/auth/login`      | Connexion (retourne JWT) | Non  |
-| PATCH   | `/auth/deactivate` | Désactivation du compte  | Oui  |
+| PATCH   | `/auth/deactivate` | Désactivation volontaire du compte | Oui  |
+
+## Statuts de compte (`statut_compte`)
+
+| Valeur                  | Description                                      |
+|-------------------------|--------------------------------------------------|
+| `actif`                 | Compte fonctionnel                               |
+| `desactive_utilisateur` | Pause volontaire — réactivation auto à la connexion |
+| `suspendu_admin`        | Suspension admin — connexion refusée (403)       |
+
+> Compatibilité : l'ancienne valeur `desactive` est traitée comme `desactive_utilisateur`.
 
 ## CORS
 

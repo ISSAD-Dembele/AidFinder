@@ -10,7 +10,7 @@ class Utilisateur(Base):
     email = Column(String, unique=True, nullable=False)
     mot_de_passe_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    statut_compte = Column(String, nullable=False)
+    statut_compte = Column(String, nullable=False)  # actif | desactive_utilisateur | suspendu_admin
     date_naissance = Column(DateTime)
     region = Column(String)
     niveau_etude = Column(String)

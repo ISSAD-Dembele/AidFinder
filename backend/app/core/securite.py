@@ -5,6 +5,7 @@ from passlib.context import CryptContext #gestionnaire de hashage de mot de pass
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import(SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES)
+from app.core.statuts_compte import est_desactive_par_utilisateur, est_suspendu_par_admin
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models.utilisateurs import Utilisateur
@@ -56,4 +57,17 @@ def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(g
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Utilisateur non trouvé."
         )
+
+    # Bloque l'accès aux routes protégées si le compte n'est plus actif
+    if est_suspendu_par_admin(user.statut_compte):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre compte a été suspendu par un administrateur."
+        )
+    if est_desactive_par_utilisateur(user.statut_compte):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ce compte est désactivé."
+        )
+
     return user

@@ -7,6 +7,18 @@ from sqlalchemy import select
 from app.models.utilisateurs import Utilisateur
 from app.schemas.utilisateur import UserCreate, UserLogin
 from app.core.securite import hash_password, verify_password, create_access_token
+from app.core.statuts_compte import (
+    ACTIF,
+    DESACTIVE_UTILISATEUR,
+    est_desactive_par_utilisateur,
+    est_suspendu_par_admin,
+)
+
+
+def _generate_login_response(user: Utilisateur) -> dict:
+    access_token = create_access_token(data={"sub": str(user.user_id)})
+    return {"access_token": access_token, "token_type": "bearer"}
+
 
 def register_user(db: Session, user: UserCreate):
     # Vérifiez si l'utilisateur existe déjà
@@ -26,7 +38,7 @@ def register_user(db: Session, user: UserCreate):
         email=user.email,
         mot_de_passe_hash=hashed_password,
         role="utilisateur",  # Default role
-        statut_compte="actif",  # Default status
+        statut_compte=ACTIF,
         date_creation=datetime.now(timezone.utc)
     )
     
@@ -38,40 +50,50 @@ def register_user(db: Session, user: UserCreate):
     return new_user
 
 def login_user(db: Session, user: UserLogin):
-    # Vérifiez si l'utilisateur existe
-    stmt=select(Utilisateur).where(Utilisateur.email == user.email)
+    stmt = select(Utilisateur).where(Utilisateur.email == user.email)
     bd_user = db.execute(stmt).scalar_one_or_none()
     if bd_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect"
         )
-    if bd_user.statut_compte == "desactive":
+
+    # Suspension admin : refus immédiat, non contournable à la connexion
+    if est_suspendu_par_admin(bd_user.statut_compte):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ce compte est désactivé"
+            detail="Votre compte a été suspendu par un administrateur. Contactez le support pour plus d'informations."
         )
-    # Vérifiez le mot de passe
+
     if not verify_password(user.password, bd_user.mot_de_passe_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect"
         )
-    access_token= create_access_token(
-        data={"sub":str(bd_user.user_id)}
-        )
-    return {
-        "access_token":access_token,
-        "token_type":"bearer"
-    }
+
+    # Pause volontaire : la connexion réactive automatiquement le compte
+    if est_desactive_par_utilisateur(bd_user.statut_compte):
+        bd_user.statut_compte = ACTIF
+        bd_user.date_desactivation = None
+        db.commit()
+        db.refresh(bd_user)
+
+    return _generate_login_response(bd_user)
 
 def deactivate_user(db: Session, current_user: Utilisateur):
-    if current_user.statut_compte =="desactive":
+    if est_suspendu_par_admin(current_user.statut_compte):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ce compte est suspendu par un administrateur"
+        )
+    if est_desactive_par_utilisateur(current_user.statut_compte):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ce compte est déjà désactivé"
         )
-    current_user.statut_compte = "desactive"
+
+    # Désactivation volontaire — distincte d'une suspension admin
+    current_user.statut_compte = DESACTIVE_UTILISATEUR
     current_user.date_desactivation = datetime.now(timezone.utc)
         
     db.commit()
