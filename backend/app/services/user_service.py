@@ -4,6 +4,9 @@ from app.schemas.utilisateur import (UserProfileUpdate, ChangePassword)
 from app.core.securite import verify_password, hash_password
 from fastapi import HTTPException, status
 
+from fastapi import UploadFile
+import shutil, os
+
 def get_user_profile(current_user: Utilisateur):
     return current_user
 
@@ -40,3 +43,52 @@ def change_user_password(db: Session, current_user: Utilisateur, data: ChangePas
     db.refresh(current_user)
     
     return {"message": "Mot de passe mis à jour avec succès."}
+
+def upload_profile_photo(db: Session, current_user: Utilisateur, file: UploadFile):
+    # supprimer l'ancienne photo si elle existe
+    if current_user.photo_profil:
+        old_file = current_user.photo_profil.lstrip("/") # enlever le slash initial
+        if os.path.exists(old_file):
+            os.remove(old_file)
+            
+    # Vérifier si le fichier est une image
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le fichier téléchargé n'est pas une image."
+        )
+    # recuperer l'extension du fichier
+    
+    extension = file.filename.split(".")[-1].lower()
+    extension = os.path.splitext(file.filename)[1].lower().replace(".", "")
+    allowed_extensions = ["jpg", "jpeg", "png","webp"]
+    if extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Extension de fichier non autorisée. Les extensions autorisées sont : {', '.join(allowed_extensions)}."
+        )
+    
+    # nom unique
+    
+    filename = f"user_{current_user.user_id}.{extension}"
+    
+    # Chemin physique sur le disque
+    file_path = os.path.join("uploads", "profiles", filename)
+
+    # Chemin qui sera enregistré en base
+    db_path = f"/uploads/profiles/{filename}"
+
+    # Créer le dossier si nécessaire
+    os.makedirs("uploads/profiles", exist_ok=True)
+
+    # Sauvegarder l'image
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    file.file.close()  # fermer le fichier après l'avoir utilisé
+    
+    # Mettre à jour la base
+    current_user.photo_profil = db_path
+    db.commit()
+    db.refresh(current_user)
+    
+    return {"message": "Photo de profil mise à jour avec succès.", "photo_profil": db_path}

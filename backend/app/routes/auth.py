@@ -4,7 +4,7 @@ from app.core.securite import get_current_user
 from app.models.utilisateurs import Utilisateur
 
 from app.database.session import get_db
-from app.schemas.utilisateur import (UserCreate, UserLogin, UserReponse, Token, MessageResponse)
+from app.schemas.utilisateur import (UserCreate, UserLogin, UserResponse, Token, MessageResponse)
 
 from app.services.auth_service import(register_user, login_user, deactivate_user)
 
@@ -13,7 +13,7 @@ router = APIRouter(
     tags =["Authentification"]
 )
 
-@router.post("/register", response_model=UserReponse)
+@router.post("/register", response_model=UserResponse)
 def register(
     user:UserCreate,
     db:Session = Depends(get_db)

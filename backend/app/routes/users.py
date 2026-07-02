@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.core.securite import get_current_user
 from app.models.utilisateurs import Utilisateur
 
-from app.schemas.utilisateur import (UserProfileUpdate, ChangePassword, UserProfileResponse, MessageResponse)
-from app.services.user_service import( update_user_profile, change_user_password, get_user_profile)
+from app.schemas.utilisateur import (UserProfileUpdate, ChangePassword, UserProfileResponse, MessageResponse, UploadPhotoResponse)
+from app.services.user_service import( update_user_profile, change_user_password, get_user_profile, upload_profile_photo)
 
 router = APIRouter(
     prefix="/users",
@@ -26,3 +26,8 @@ def update_profile(data: UserProfileUpdate, current_user: Utilisateur = Depends(
 @router.patch("/change-password", response_model=MessageResponse)
 def change_password(data: ChangePassword, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(get_db)):
     return change_user_password(db, current_user, data)
+
+#telecharger une photo de profil
+@router.patch("/photo", response_model=UploadPhotoResponse)
+def upload_photo(file: UploadFile = File(...), current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(get_db)):
+    return upload_profile_photo(db, current_user, file)

@@ -15,6 +15,10 @@ class UserLogin(BaseModel):
 class MessageResponse(BaseModel):
     message: str
     
+class UploadPhotoResponse(BaseModel):
+    message: str
+    photo_profil: str
+
 class UserProfileUpdate(BaseModel):
     nom: str | None = None
     date_naissance: date | None = None
