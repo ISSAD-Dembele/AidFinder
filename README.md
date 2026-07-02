@@ -27,8 +27,11 @@ L'application aide les utilisateurs à identifier les aides financières auxquel
 
 ## Fonctionnalités
 
-- Authentification (inscription, connexion, désactivation)
+- Authentification (inscription, connexion, désactivation volontaire)
 - Dashboard utilisateur avec interface chatbot
+- Profil utilisateur (consultation, modification, photo)
+- Changement de mot de passe
+- Complétion obligatoire du profil (date de naissance + région)
 - Recherche d'aides (à venir)
 - Historique (à venir)
 - Export PDF (à venir)
@@ -92,6 +95,8 @@ Home → Register → Login → Dashboard
 - **Register** (`/register`) — création de compte
 - **Login** (`/login`) — connexion
 - **Dashboard** (`/dashboard`) — espace utilisateur (protégé)
+- **Profil** (`/dashboard/profil`) — gestion du profil (protégé)
+- **Mot de passe** (`/dashboard/changer-mot-de-passe`) — changement de mot de passe (protégé)
 
 ## Documentation détaillée
 

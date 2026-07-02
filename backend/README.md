@@ -76,6 +76,10 @@ backend/
 | POST    | `/auth/register`   | Inscription utilisateur  | Non  |
 | POST    | `/auth/login`      | Connexion (retourne JWT) | Non  |
 | PATCH   | `/auth/deactivate` | Désactivation volontaire du compte | Oui  |
+| GET     | `/users/me`        | Consultation du profil             | Oui  |
+| PATCH   | `/users/me`        | Modification du profil             | Oui  |
+| PATCH   | `/users/change-password` | Changement du mot de passe   | Oui  |
+| PATCH   | `/users/photo`     | Upload photo de profil             | Oui  |
 
 ## Statuts de compte (`statut_compte`)
 

@@ -7,6 +7,8 @@ import Home from '@/src/pages/Home'
 import Register from '@/src/pages/Register'
 import Login from '@/src/pages/Login'
 import DashbordUI from '@/src/pages/DashbordUI'
+import Profile from '@/src/pages/Profile'
+import ChangePassword from '@/src/pages/ChangePassword'
 
 /** Redirige les utilisateurs connectés vers le dashboard */
 function GuestRoute({ children }) {
@@ -48,6 +50,8 @@ function AppRoutes() {
         }
       >
         <Route path="dashboard" element={<DashbordUI />} />
+        <Route path="dashboard/profil" element={<Profile />} />
+        <Route path="dashboard/changer-mot-de-passe" element={<ChangePassword />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

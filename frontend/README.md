@@ -58,11 +58,12 @@ frontend/
 ├── public/              # Assets statiques
 ├── src/
 │   ├── assets/          # Images et illustrations
-│   ├── components/      # Composants métier (Navbar, Sidebar…)
-│   ├── contexts/        # Contextes React (AuthContext)
+│   ├── components/      # Composants métier (Navbar, Sidebar, Profil…)
+│   ├── constants/       # Options de formulaire (régions, statuts…)
+│   ├── contexts/        # Contextes React (AuthContext, ProfileContext)
 │   ├── layouts/         # Layouts (Public, Dashboard)
-│   ├── pages/           # Pages (Home, Login, Register, Dashboard)
-│   ├── services/        # Appels API (api.js, auth.js)
+│   ├── pages/           # Pages (Home, Login, Register, Dashboard, Profil…)
+│   ├── services/        # Appels API (api.js, auth.js, user.js)
 │   └── utils/           # Utilitaires frontend
 ├── index.html
 ├── vite.config.js
@@ -71,12 +72,18 @@ frontend/
 
 ## Pages développées
 
-| Route         | Page              | Accès        |
-|---------------|-------------------|--------------|
-| `/`           | Home              | Public       |
-| `/register`   | Inscription       | Public       |
-| `/login`      | Connexion         | Public       |
-| `/dashboard`  | Dashboard (chat)  | Authentifié  |
+| Route                            | Page                    | Accès        |
+|----------------------------------|-------------------------|--------------|
+| `/`                              | Home                    | Public       |
+| `/register`                      | Inscription             | Public       |
+| `/login`                         | Connexion               | Public       |
+| `/dashboard`                     | Dashboard (chat)        | Authentifié  |
+| `/dashboard/profil`              | Profil utilisateur      | Authentifié  |
+| `/dashboard/changer-mot-de-passe`| Changement mot de passe | Authentifié  |
+
+## Complétion du profil
+
+À la première connexion, si la **date de naissance** ou la **région** sont absentes, une fenêtre modale obligatoire s'affiche avant l'accès au Dashboard. Les champs facultatifs (niveau d'étude, statut socioprofessionnel, handicap) peuvent être complétés plus tard depuis la page Profil.
 
 ## Authentification
 
@@ -88,6 +95,13 @@ frontend/
 
 Les services dans `src/services/` communiquent avec les routes FastAPI :
 
+**Authentification (`auth.js`)**
 - `POST /auth/register` — inscription
 - `POST /auth/login` — connexion (retourne un JWT)
-- `PATCH /auth/deactivate` — désactivation du compte
+- `PATCH /auth/deactivate` — désactivation volontaire du compte
+
+**Profil utilisateur (`user.js`)**
+- `GET /users/me` — consultation du profil
+- `PATCH /users/me` — modification du profil
+- `PATCH /users/change-password` — changement du mot de passe
+- `PATCH /users/photo` — upload de la photo de profil

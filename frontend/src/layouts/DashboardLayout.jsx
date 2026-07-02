@@ -3,12 +3,14 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 import Logo from '@/src/components/Logo'
 import Sidebar from '@/src/components/dashboard/Sidebar'
+import ProfileCompletionDialog from '@/src/components/profile/ProfileCompletionDialog'
+import { ProfileProvider, useProfile } from '@/src/contexts/ProfileContext'
 import { useAuth } from '@/src/contexts/AuthContext'
 
-/** Layout du dashboard avec sidebar responsive (mobile first) */
-export default function DashboardLayout() {
+function DashboardContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { deactivateAccount } = useAuth()
+  const { loading, isProfileComplete } = useProfile()
   const navigate = useNavigate()
 
   const handleDeactivate = async () => {
@@ -17,13 +19,14 @@ export default function DashboardLayout() {
       await deactivateAccount()
       navigate('/')
     } catch {
-      // L'erreur est gérée dans la page Dashboard
+      // Erreur gérée par le composant appelant
     }
   }
 
   return (
     <div className="flex min-h-screen bg-white">
-      {/* Overlay mobile */}
+      <ProfileCompletionDialog />
+
       {sidebarOpen && (
         <button
           type="button"
@@ -33,7 +36,6 @@ export default function DashboardLayout() {
         />
       )}
 
-      {/* Sidebar — drawer sur mobile, fixe sur desktop */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-[#1a2332] transition-transform duration-300 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -53,7 +55,6 @@ export default function DashboardLayout() {
         <Sidebar onDeactivate={handleDeactivate} onNavigate={() => setSidebarOpen(false)} />
       </aside>
 
-      {/* Contenu principal */}
       <div className="flex flex-1 flex-col">
         <header className="flex h-14 items-center border-b border-border px-4 lg:hidden">
           <button
@@ -67,10 +68,23 @@ export default function DashboardLayout() {
           <Logo linkTo="/dashboard" />
         </header>
 
-        <main className="flex flex-1 flex-col">
+        <main
+          className={`flex flex-1 flex-col transition-opacity duration-300 ${
+            !loading && !isProfileComplete ? 'pointer-events-none opacity-40' : ''
+          }`}
+        >
           <Outlet />
         </main>
       </div>
     </div>
+  )
+}
+
+/** Layout du dashboard avec sidebar responsive et complétion de profil */
+export default function DashboardLayout() {
+  return (
+    <ProfileProvider>
+      <DashboardContent />
+    </ProfileProvider>
   )
 }
