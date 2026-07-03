@@ -61,7 +61,7 @@ def upload_profile_photo(db: Session, current_user: Utilisateur, file: UploadFil
     
     extension = file.filename.split(".")[-1].lower()
     extension = os.path.splitext(file.filename)[1].lower().replace(".", "")
-    allowed_extensions = ["jpg", "jpeg", "png","webp"]
+    allowed_extensions = ["jpg", "jpeg", "png","webp", "heic"]
     if extension not in allowed_extensions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
