@@ -28,7 +28,10 @@ cp .env.example .env
 
 | Variable        | Description              | Valeur par défaut        |
 |-----------------|--------------------------|--------------------------|
-| `VITE_API_URL`  | URL de l'API FastAPI     | `http://localhost:8000`  |
+| `VITE_API_URL`  | URL complète de l'API (optionnel) | Déduite automatiquement du navigateur |
+| `VITE_API_PORT` | Port du backend si `VITE_API_URL` absent | `8000`                   |
+
+Sans `VITE_API_URL`, le frontend appelle l'API sur le **même hôte** que la page ouverte (`localhost` sur PC, IP locale sur téléphone).
 
 ## Lancement
 
@@ -37,6 +40,19 @@ npm run dev
 ```
 
 L'application est accessible sur [http://localhost:5173](http://localhost:5173).
+
+Vite écoute aussi sur le réseau local (`host: true`). L'URL réseau s'affiche dans le terminal.
+
+## Accès depuis un téléphone
+
+1. PC et téléphone sur le **même Wi-Fi**
+2. Backend lancé avec `--host 0.0.0.0` (voir [Backend README](../backend/README.md))
+3. Frontend lancé avec `npm run dev`
+4. Ouvrir sur le téléphone l'URL affichée par Vite, par ex. `http://192.168.1.42:5173`
+
+Pour connaître l'IP du PC : `ipconfig getifaddr en0` (macOS) ou `hostname -I` (Linux).
+
+Aucun changement de `.env` n'est requis : l'API est joignable sur `http://<IP-du-PC>:8000` automatiquement.
 
 ## Scripts disponibles
 

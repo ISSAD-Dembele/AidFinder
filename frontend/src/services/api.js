@@ -1,11 +1,12 @@
 import axios from 'axios'
+import { getApiBaseUrl } from '@/src/config/env'
 
 /**
  * Instance Axios centralisée pour toutes les requêtes HTTP.
  * Le token JWT est injecté automatiquement via un intercepteur.
  */
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

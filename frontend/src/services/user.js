@@ -1,6 +1,5 @@
 import api from './api'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { getApiBaseUrl } from '@/src/config/env'
 
 /**
  * Service utilisateur — communique avec les routes FastAPI /users/*
@@ -44,7 +43,7 @@ export const userService = {
 /** Construit l'URL complète d'une photo de profil servie par FastAPI */
 export function getProfilePhotoUrl(photoPath) {
   if (!photoPath) return null
-  return `${API_URL}${photoPath}`
+  return `${getApiBaseUrl()}${photoPath}`
 }
 
 export default userService

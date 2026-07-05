@@ -68,7 +68,7 @@ Créer le fichier `.env` (voir [backend/README.md](backend/README.md)) puis :
 
 ```bash
 python -m app.create_tables
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 2. Frontend
@@ -87,6 +87,58 @@ npm run dev
 | Frontend  | http://localhost:5173            |
 | Backend   | http://localhost:8000            |
 | API Docs  | http://localhost:8000/docs       |
+
+## Accès depuis un téléphone
+
+En développement, le frontend et le backend écoutent sur toutes les interfaces réseau (`0.0.0.0`). Vous pouvez tester l'application depuis un téléphone connecté au même Wi-Fi.
+
+### 1. Connaître l'adresse IP du PC
+
+**macOS :**
+```bash
+ipconfig getifaddr en0
+```
+
+**Linux :**
+```bash
+hostname -I | awk '{print $1}'
+```
+
+**Windows (PowerShell) :**
+```powershell
+(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Wi-Fi").IPAddress
+```
+
+Remplacez `192.168.x.x` ci-dessous par l'adresse affichée.
+
+### 2. Lancer le backend
+
+```bash
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 3. Lancer le frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+Vite affiche l'URL réseau dans le terminal (ex. `http://192.168.x.x:5173`).
+
+### 4. Ouvrir sur le téléphone
+
+Dans le navigateur du téléphone, ouvrez :
+
+```
+http://192.168.x.x:5173
+```
+
+L'API est contactée automatiquement sur `http://192.168.x.x:8000` (même hôte que le frontend). Aucune modification de `.env` n'est nécessaire tant que le backend tourne sur le port 8000.
+
+> **PC :** l'accès via `http://localhost:5173` continue de fonctionner normalement.
 
 ## Navigation
 

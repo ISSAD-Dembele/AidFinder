@@ -35,7 +35,14 @@ DATABASE_URL=postgresql://user:password@localhost:5432/aidfinder
 SECRET_KEY=votre_cle_secrete
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Serveur (développement)
+HOST=0.0.0.0
+PORT=8000
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
+
+Voir `.env.example` pour la liste complète des variables.
 
 ## Initialisation de la base de données
 
@@ -46,12 +53,22 @@ python -m app.create_tables
 ## Lancement
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-L'API est accessible sur [http://localhost:8000](http://localhost:8000).
+L'API est accessible sur [http://localhost:8000](http://localhost:8000) (PC) et sur `http://<IP-locale>:8000` (réseau local).
 
 Documentation interactive : [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Accès depuis un téléphone
+
+Le serveur doit écouter sur `0.0.0.0` (valeur par défaut de `HOST` dans `.env`) :
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Le frontend sur le téléphone appellera l'API à `http://<IP-du-PC>:8000`. Vérifier que le pare-feu autorise les connexions entrantes sur les ports 5173 et 8000.
 
 ## Architecture des dossiers
 
@@ -106,4 +123,14 @@ Les endpoints de gestion (utilisateurs, aides, statistiques) seront ajoutés dan
 
 ## CORS
 
-Le middleware CORS autorise les requêtes depuis `http://localhost:5173` (frontend Vite).
+Le middleware CORS autorise :
+
+- `http://localhost:5173` et `http://127.0.0.1:5173` (PC)
+- Les origines du réseau local privé sur le port 5173 (ex. `http://192.168.x.x:5173`) via une regex configurable
+
+Variables dans `.env` :
+
+| Variable             | Description                                      |
+|----------------------|--------------------------------------------------|
+| `CORS_ORIGINS`       | Origines explicites (séparées par des virgules)  |
+| `CORS_ORIGIN_REGEX`  | Regex pour les IP privées ; laisser vide pour désactiver |
