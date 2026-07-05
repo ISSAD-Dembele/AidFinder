@@ -33,6 +33,12 @@ export const userService = {
     })
     return data
   },
+
+  /** Supprime la photo via PATCH /users/me (photo_profil: null) */
+  deletePhoto: async () => {
+    const { data } = await api.patch('/users/me', { photo_profil: null })
+    return data
+  },
 }
 
 /** Construit l'URL complète d'une photo de profil servie par FastAPI */

@@ -38,6 +38,12 @@ export function ProfileProvider({ children }) {
     return fetchProfile()
   }, [fetchProfile])
 
+  const deletePhoto = useCallback(async () => {
+    const updated = await userService.deletePhoto()
+    setProfile(updated)
+    return updated
+  }, [])
+
   const value = useMemo(
     () => ({
       profile,
@@ -45,9 +51,10 @@ export function ProfileProvider({ children }) {
       isProfileComplete: isProfileComplete(profile),
       updateProfile,
       uploadPhoto,
+      deletePhoto,
       refreshProfile: fetchProfile,
     }),
-    [profile, loading, updateProfile, uploadPhoto, fetchProfile]
+    [profile, loading, updateProfile, uploadPhoto, deletePhoto, fetchProfile]
   )
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>

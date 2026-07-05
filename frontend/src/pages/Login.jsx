@@ -5,14 +5,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/src/contexts/AuthContext'
+import { getDashboardBasePath } from '@/src/utils/navigation'
 import { getApiErrorMessage } from '@/src/utils/errors'
 
 /** Page de connexion — communique avec POST /auth/login */
 export default function Login() {
-  const { login } = useAuth()
+  const { login, role } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = location.state?.from?.pathname || '/dashboard'
+  const defaultPath = role ? getDashboardBasePath(role) : '/dashboard'
+  const from = location.state?.from?.pathname || defaultPath
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
@@ -27,8 +29,8 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(form)
-      navigate(from, { replace: true })
+      const data = await login(form)
+      navigate(getDashboardBasePath(data.role), { replace: true })
     } catch (err) {
       setError(getApiErrorMessage(err, 'Email ou mot de passe incorrect'))
     } finally {

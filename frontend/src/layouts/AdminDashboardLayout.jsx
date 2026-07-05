@@ -1,15 +1,13 @@
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '@/src/components/dashboard/Sidebar'
+import AdminSidebar from '@/src/components/dashboard/AdminSidebar'
 import DashboardShell from '@/src/components/dashboard/DashboardShell'
-import ProfileCompletionDialog from '@/src/components/profile/ProfileCompletionDialog'
-import { ProfileProvider, useProfile } from '@/src/contexts/ProfileContext'
+import { ProfileProvider } from '@/src/contexts/ProfileContext'
 import { useAuth } from '@/src/contexts/AuthContext'
 
-const BASE_PATH = '/dashboard'
+const BASE_PATH = '/admin'
 
-function UserDashboardContent() {
+function AdminDashboardContent() {
   const { deactivateAccount } = useAuth()
-  const { loading, isProfileComplete } = useProfile()
   const navigate = useNavigate()
 
   const handleDeactivate = async () => {
@@ -25,10 +23,8 @@ function UserDashboardContent() {
   return (
     <DashboardShell
       basePath={BASE_PATH}
-      dimmed={!loading && !isProfileComplete}
-      dialog={<ProfileCompletionDialog />}
       sidebar={({ onNavigate }) => (
-        <Sidebar
+        <AdminSidebar
           basePath={BASE_PATH}
           onDeactivate={handleDeactivate}
           onNavigate={onNavigate}
@@ -38,11 +34,11 @@ function UserDashboardContent() {
   )
 }
 
-/** Layout du dashboard utilisateur */
-export default function DashboardLayout() {
+/** Layout du dashboard administrateur */
+export default function AdminDashboardLayout() {
   return (
     <ProfileProvider>
-      <UserDashboardContent />
+      <AdminDashboardContent />
     </ProfileProvider>
   )
 }

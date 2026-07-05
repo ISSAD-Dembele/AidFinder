@@ -5,12 +5,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useProfile } from '@/src/contexts/ProfileContext'
 import userService from '@/src/services/user'
 import { getApiErrorMessage } from '@/src/utils/errors'
+import { getDashboardBasePath } from '@/src/utils/navigation'
 
-/** Page changement de mot de passe — connectée à PATCH /users/change-password */
+/** Page changement de mot de passe — partagée entre utilisateur et administrateur */
 export default function ChangePassword() {
+  const { profile } = useProfile()
   const navigate = useNavigate()
+  const basePath = getDashboardBasePath(profile?.role)
+
   const [form, setForm] = useState({
     current_password: '',
     new_password: '',
@@ -39,7 +44,7 @@ export default function ChangePassword() {
       const data = await userService.changePassword(form)
       setSuccess(data.message)
       setForm({ current_password: '', new_password: '', confirm_new_password: '' })
-      setTimeout(() => navigate('/dashboard/profil'), 2000)
+      setTimeout(() => navigate(`${basePath}/profil`), 2000)
     } catch (err) {
       setError(getApiErrorMessage(err, 'Impossible de changer le mot de passe.'))
     } finally {
@@ -51,7 +56,7 @@ export default function ChangePassword() {
     <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-6">
       <div className="w-full max-w-md">
         <Link
-          to="/dashboard/profil"
+          to={`${basePath}/profil`}
           className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />

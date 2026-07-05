@@ -1,21 +1,29 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext'
+import { ToastProvider } from '@/src/contexts/ToastContext'
 import ProtectedRoute from '@/src/components/ProtectedRoute'
 import PublicLayout from '@/src/layouts/PublicLayout'
 import DashboardLayout from '@/src/layouts/DashboardLayout'
+import AdminDashboardLayout from '@/src/layouts/AdminDashboardLayout'
 import Home from '@/src/pages/Home'
 import Register from '@/src/pages/Register'
 import Login from '@/src/pages/Login'
 import DashbordUI from '@/src/pages/DashbordUI'
+import AdminDashboard from '@/src/pages/AdminDashboard'
 import Profile from '@/src/pages/Profile'
 import ChangePassword from '@/src/pages/ChangePassword'
+import { getDashboardBasePath } from '@/src/utils/navigation'
 
-/** Redirige les utilisateurs connectés vers le dashboard */
+/** Redirige les utilisateurs connectés vers leur dashboard selon le rôle */
 function GuestRoute({ children }) {
-  const { isAuthenticated } = useAuth()
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
+  const { isAuthenticated, role, authLoading } = useAuth()
+
+  if (authLoading) return null
+
+  if (isAuthenticated && role) {
+    return <Navigate to={getDashboardBasePath(role)} replace />
   }
+
   return children
 }
 
@@ -42,9 +50,10 @@ function AppRoutes() {
         />
       </Route>
 
+      {/* Dashboard utilisateur */}
       <Route
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['utilisateur']}>
             <DashboardLayout />
           </ProtectedRoute>
         }
@@ -52,6 +61,19 @@ function AppRoutes() {
         <Route path="dashboard" element={<DashbordUI />} />
         <Route path="dashboard/profil" element={<Profile />} />
         <Route path="dashboard/changer-mot-de-passe" element={<ChangePassword />} />
+      </Route>
+
+      {/* Dashboard administrateur */}
+      <Route
+        element={
+          <ProtectedRoute allowedRoles={['administrateur']}>
+            <AdminDashboardLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="admin" element={<AdminDashboard />} />
+        <Route path="admin/profil" element={<Profile />} />
+        <Route path="admin/changer-mot-de-passe" element={<ChangePassword />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -62,7 +84,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
     </AuthProvider>
   )
 }

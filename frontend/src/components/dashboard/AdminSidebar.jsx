@@ -1,16 +1,19 @@
 import { cn } from '@/lib/utils'
 import Logo from '@/src/components/Logo'
-import HelpCard from '@/src/components/dashboard/HelpCard'
 import SidebarNavItem from '@/src/components/dashboard/SidebarNavItem'
+import { useAuth } from '@/src/contexts/AuthContext'
 
 const NAV_LINKS = [
-  { label: 'Historiques', to: null },
-  { label: 'Profil', to: 'profil' },
-  { label: 'Aides recommandées', to: null },
+  { label: 'Utilisateurs', to: null },
+  { label: 'Aides', to: null },
+  { label: 'Statistiques', to: null },
+  { label: 'Paramètres', to: 'profil' },
 ]
 
-/** Sidebar du dashboard utilisateur */
-export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavigate }) {
+/** Sidebar du dashboard administrateur — conforme à la maquette Dashbord_admin */
+export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavigate }) {
+  const { logout } = useAuth()
+
   return (
     <div className="flex h-full flex-col px-5 py-6 lg:py-8">
       <div className="mb-10 hidden lg:block">
@@ -18,12 +21,8 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
       </div>
 
       <nav className="flex flex-col gap-1">
-        <SidebarNavItem
-          to={basePath}
-          end
-          onClick={() => onNavigate?.()}
-        >
-          Nouveau Chat
+        <SidebarNavItem to={basePath} end onClick={() => onNavigate?.()}>
+          Tableau de bord
         </SidebarNavItem>
 
         {NAV_LINKS.map((item) => (
@@ -40,6 +39,20 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
         <button
           type="button"
           onClick={() => {
+            logout()
+            onNavigate?.()
+          }}
+          className={cn(
+            'block w-full rounded-lg bg-transparent px-3 py-2.5 text-left text-sm text-white/90',
+            'transition-all duration-200 hover:bg-[#2963E8] hover:text-white'
+          )}
+        >
+          Déconnexion
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
             onDeactivate()
             onNavigate?.()
           }}
@@ -51,10 +64,6 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
           Désactivation du compte
         </button>
       </nav>
-
-      <div className="mt-auto pt-8">
-        <HelpCard />
-      </div>
     </div>
   )
 }
