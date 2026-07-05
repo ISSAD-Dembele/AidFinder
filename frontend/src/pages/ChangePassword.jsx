@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useAuth } from '@/src/contexts/AuthContext'
 import { useProfile } from '@/src/contexts/ProfileContext'
 import userService from '@/src/services/user'
 import { getApiErrorMessage } from '@/src/utils/errors'
@@ -12,9 +13,10 @@ import { getDashboardBasePath } from '@/src/utils/navigation'
 
 /** Page changement de mot de passe — partagée entre utilisateur et administrateur */
 export default function ChangePassword() {
+  const { role } = useAuth()
   const { profile } = useProfile()
   const navigate = useNavigate()
-  const basePath = getDashboardBasePath(profile?.role)
+  const basePath = getDashboardBasePath(role ?? profile?.role)
 
   const [form, setForm] = useState({
     current_password: '',

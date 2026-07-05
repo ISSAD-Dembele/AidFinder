@@ -28,10 +28,13 @@ L'application aide les utilisateurs à identifier les aides financières auxquel
 ## Fonctionnalités
 
 - Authentification (inscription, connexion, désactivation volontaire)
+- Routage par rôle (utilisateur / administrateur)
 - Dashboard utilisateur avec interface chatbot
-- Profil utilisateur (consultation, modification, photo)
-- Changement de mot de passe
-- Complétion obligatoire du profil (date de naissance + région)
+- Dashboard administrateur (statistiques et aperçu plateforme)
+- Profil utilisateur partagé (consultation, modification, photo, suppression)
+- Changement de mot de passe (utilisateur et administrateur)
+- Complétion obligatoire du profil (date de naissance + région) — utilisateurs uniquement
+- Notifications toast pour les actions profil
 - Recherche d'aides (à venir)
 - Historique (à venir)
 - Export PDF (à venir)
@@ -88,15 +91,28 @@ npm run dev
 ## Navigation
 
 ```
-Home → Register → Login → Dashboard
+Home → Register → Login → Dashboard (utilisateur ou administrateur)
 ```
+
+### Pages publiques
 
 - **Home** (`/`) — page visiteur
 - **Register** (`/register`) — création de compte
 - **Login** (`/login`) — connexion
-- **Dashboard** (`/dashboard`) — espace utilisateur (protégé)
+
+### Dashboard utilisateur (rôle `utilisateur`)
+
+- **Dashboard** (`/dashboard`) — espace chatbot (protégé)
 - **Profil** (`/dashboard/profil`) — gestion du profil (protégé)
 - **Mot de passe** (`/dashboard/changer-mot-de-passe`) — changement de mot de passe (protégé)
+
+### Dashboard administrateur (rôle `administrateur`)
+
+- **Tableau de bord** (`/admin`) — statistiques et aperçu plateforme (protégé)
+- **Profil** (`/admin/profil`) — gestion du profil admin (protégé)
+- **Mot de passe** (`/admin/changer-mot-de-passe`) — changement de mot de passe (protégé)
+
+> Après connexion, l'utilisateur est redirigé automatiquement vers `/dashboard` ou `/admin` selon son rôle.
 
 ## Documentation détaillée
 

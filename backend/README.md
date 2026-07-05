@@ -79,7 +79,7 @@ backend/
 | GET     | `/users/me`        | Consultation du profil             | Oui  |
 | PATCH   | `/users/me`        | Modification du profil             | Oui  |
 | PATCH   | `/users/change-password` | Changement du mot de passe   | Oui  |
-| PATCH   | `/users/photo`     | Upload photo de profil             | Oui  |
+| PATCH   | `/users/photo`     | Upload photo de profil (jpg, jpeg, png, webp, heic) | Oui  |
 
 ## Statuts de compte (`statut_compte`)
 
@@ -90,6 +90,19 @@ backend/
 | `suspendu_admin`        | Suspension admin — connexion refusée (403)       |
 
 > Compatibilité : l'ancienne valeur `desactive` est traitée comme `desactive_utilisateur`.
+
+## Rôles utilisateur
+
+| Rôle              | Dashboard frontend | Description                          |
+|-------------------|--------------------|--------------------------------------|
+| `utilisateur`     | `/dashboard`       | Compte standard — recherche d'aides  |
+| `administrateur`  | `/admin`           | Gestion de la plateforme             |
+
+> Les comptes administrateurs sont créés directement en base de données (table `utilisateurs` avec `role = 'administrateur'` et entrée associée dans `administrateurs`).
+
+## Routes admin (à venir)
+
+Les endpoints de gestion (utilisateurs, aides, statistiques) seront ajoutés dans une prochaine itération.
 
 ## CORS
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,11 +10,8 @@ import { getApiErrorMessage } from '@/src/utils/errors'
 
 /** Page de connexion — communique avec POST /auth/login */
 export default function Login() {
-  const { login, role } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-  const defaultPath = role ? getDashboardBasePath(role) : '/dashboard'
-  const from = location.state?.from?.pathname || defaultPath
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')

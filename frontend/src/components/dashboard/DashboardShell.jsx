@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 import Logo from '@/src/components/Logo'
 
@@ -12,7 +12,6 @@ export default function DashboardShell({
   dialog,
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const navigate = useNavigate()
 
   const closeSidebar = () => setSidebarOpen(false)
 

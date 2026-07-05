@@ -60,8 +60,8 @@ frontend/
 │   ├── assets/          # Images et illustrations
 │   ├── components/      # Composants métier (Navbar, Sidebar, Profil…)
 │   ├── constants/       # Options de formulaire (régions, statuts…)
-│   ├── contexts/        # Contextes React (AuthContext, ProfileContext)
-│   ├── layouts/         # Layouts (Public, Dashboard)
+│   ├── contexts/        # Contextes React (AuthContext, ProfileContext, ToastContext)
+│   ├── layouts/         # Layouts (Public, Dashboard, AdminDashboard)
 │   ├── pages/           # Pages (Home, Login, Register, Dashboard, Profil…)
 │   ├── services/        # Appels API (api.js, auth.js, user.js)
 │   └── utils/           # Utilitaires frontend
@@ -72,23 +72,46 @@ frontend/
 
 ## Pages développées
 
-| Route                            | Page                    | Accès        |
-|----------------------------------|-------------------------|--------------|
-| `/`                              | Home                    | Public       |
-| `/register`                      | Inscription             | Public       |
-| `/login`                         | Connexion               | Public       |
-| `/dashboard`                     | Dashboard (chat)        | Authentifié  |
-| `/dashboard/profil`              | Profil utilisateur      | Authentifié  |
-| `/dashboard/changer-mot-de-passe`| Changement mot de passe | Authentifié  |
+| Route                             | Page                    | Accès                    |
+|-----------------------------------|-------------------------|--------------------------|
+| `/`                               | Home                    | Public                   |
+| `/register`                       | Inscription             | Public                   |
+| `/login`                          | Connexion               | Public                   |
+| `/dashboard`                      | Dashboard (chat)        | Authentifié (utilisateur)|
+| `/dashboard/profil`               | Profil utilisateur      | Authentifié (utilisateur)|
+| `/dashboard/changer-mot-de-passe` | Changement mot de passe | Authentifié (utilisateur)|
+| `/admin`                          | Dashboard administrateur| Authentifié (admin)      |
+| `/admin/profil`                   | Profil administrateur   | Authentifié (admin)      |
+| `/admin/changer-mot-de-passe`     | Changement mot de passe | Authentifié (admin)      |
+
+## Routage par rôle
+
+- Le rôle est récupéré via `GET /users/me` après connexion et stocké dans `AuthContext`
+- `ProtectedRoute` vérifie l'authentification et le rôle (`utilisateur` ou `administrateur`)
+- Un utilisateur connecté est redirigé vers son dashboard s'il tente d'accéder à une route d'un autre rôle
+- Les pages **Profil** et **Changement de mot de passe** sont partagées entre les deux rôles
+
+## Dashboard administrateur
+
+Interface conforme à la maquette `docs/maquettes/Dashbord_admin.png` :
+
+- Cartes statistiques (données mockées en attendant l'API admin)
+- Liste des aides récentes
+- Graphique d'activité des 7 derniers jours
+- Sidebar avec navigation (Utilisateurs, Aides, Statistiques — à venir)
 
 ## Complétion du profil
 
-À la première connexion, si la **date de naissance** ou la **région** sont absentes, une fenêtre modale obligatoire s'affiche avant l'accès au Dashboard. Les champs facultatifs (niveau d'étude, statut socioprofessionnel, handicap) peuvent être complétés plus tard depuis la page Profil.
+À la première connexion, si la **date de naissance** ou la **région** sont absentes, une fenêtre modale obligatoire s'affiche avant l'accès au Dashboard utilisateur. Cette contrainte ne s'applique pas aux administrateurs. Les champs facultatifs (niveau d'étude, statut socioprofessionnel, handicap) peuvent être complétés plus tard depuis la page Profil.
+
+## Notifications toast
+
+Le `ToastProvider` affiche des confirmations légères (ex. : photo de profil mise à jour ou supprimée).
 
 ## Authentification
 
 - Le JWT est stocké dans `localStorage` après connexion
-- Les routes privées sont protégées via `ProtectedRoute`
+- Les routes privées sont protégées via `ProtectedRoute` (avec contrôle de rôle)
 - La désactivation du compte appelle `PATCH /auth/deactivate` puis redirige vers Home
 
 ## Connexion au backend
@@ -101,7 +124,7 @@ Les services dans `src/services/` communiquent avec les routes FastAPI :
 - `PATCH /auth/deactivate` — désactivation volontaire du compte
 
 **Profil utilisateur (`user.js`)**
-- `GET /users/me` — consultation du profil
-- `PATCH /users/me` — modification du profil
+- `GET /users/me` — consultation du profil (inclut le rôle)
+- `PATCH /users/me` — modification du profil (photo_profil: null pour supprimer)
 - `PATCH /users/change-password` — changement du mot de passe
 - `PATCH /users/photo` — upload de la photo de profil

@@ -8,15 +8,6 @@ const AuthContext = createContext(null)
 const TOKEN_KEY = 'access_token'
 const USER_KEY = 'user'
 
-function decodeToken(token) {
-  try {
-    const payload = token.split('.')[1]
-    return JSON.parse(atob(payload))
-  } catch {
-    return null
-  }
-}
-
 /** Charge le profil pour récupérer le rôle après authentification */
 async function fetchUserRole() {
   const profile = await userService.getProfile()

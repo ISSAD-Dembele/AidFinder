@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Logo from '@/src/components/Logo'
 import SidebarNavItem from '@/src/components/dashboard/SidebarNavItem'
@@ -13,6 +14,7 @@ const NAV_LINKS = [
 /** Sidebar du dashboard administrateur — conforme à la maquette Dashbord_admin */
 export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavigate }) {
   const { logout } = useAuth()
+  const navigate = useNavigate()
 
   return (
     <div className="flex h-full flex-col px-5 py-6 lg:py-8">
@@ -41,6 +43,7 @@ export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavi
           onClick={() => {
             logout()
             onNavigate?.()
+            navigate('/')
           }}
           className={cn(
             'block w-full rounded-lg bg-transparent px-3 py-2.5 text-left text-sm text-white/90',

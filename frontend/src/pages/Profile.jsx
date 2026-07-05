@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useAuth } from '@/src/contexts/AuthContext'
 import { useProfile } from '@/src/contexts/ProfileContext'
 import { useToast } from '@/src/contexts/ToastContext'
 import ProfilePhotoCard from '@/src/components/profile/ProfilePhotoCard'
@@ -15,14 +16,16 @@ import { getDashboardBasePath, isAdmin } from '@/src/utils/navigation'
  * Le contenu s'adapte automatiquement selon profile.role.
  */
 export default function Profile() {
+  const { role } = useAuth()
   const { profile, loading, updateProfile, uploadPhoto, deletePhoto } = useProfile()
   const { showToast } = useToast()
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [photoError, setPhotoError] = useState('')
 
-  const basePath = getDashboardBasePath(profile?.role)
-  const adminUser = isAdmin(profile?.role)
+  const effectiveRole = role ?? profile?.role
+  const basePath = getDashboardBasePath(effectiveRole)
+  const adminUser = isAdmin(effectiveRole)
 
   const handlePhotoUpload = async (file) => {
     setUploading(true)

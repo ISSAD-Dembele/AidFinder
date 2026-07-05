@@ -1,4 +1,3 @@
-import { Link } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ProfileAvatar from '@/src/components/profile/ProfileAvatar'
 import { useProfile } from '@/src/contexts/ProfileContext'

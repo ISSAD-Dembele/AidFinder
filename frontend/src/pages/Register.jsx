@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/src/contexts/AuthContext'
 import { getApiErrorMessage } from '@/src/utils/errors'
+import { getDashboardBasePath } from '@/src/utils/navigation'
 
 /** Page d'inscription — communique avec POST /auth/register */
 export default function Register() {
