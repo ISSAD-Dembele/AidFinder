@@ -10,3 +10,4 @@ from .action_moderation import ActionModeration
 from .resultat_chat import ResultatChatbot
 from .document_requis import DocumentRequis
 from .export_pdf import ExportPDF
+from .scraping_logs import ScrapingLog
