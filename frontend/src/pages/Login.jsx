@@ -29,7 +29,7 @@ export default function Login() {
       const data = await login(form)
       navigate(getDashboardBasePath(data.role), { replace: true })
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Email ou mot de passe incorrect'))
+      setError(getApiErrorMessage(err, 'Connexion impossible. Réessayez.'))
     } finally {
       setLoading(false)
     }

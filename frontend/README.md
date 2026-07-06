@@ -33,6 +33,8 @@ cp .env.example .env
 
 Sans `VITE_API_URL`, le frontend appelle l'API sur le **même hôte** que la page ouverte (`localhost` sur PC, IP locale sur téléphone).
 
+> **Attention :** ne pas définir `VITE_API_URL=http://localhost:8000` si vous testez depuis un téléphone ou une tablette. Sur mobile, `localhost` pointe vers l'appareil, pas vers le PC. Le frontend ignore automatiquement une telle valeur lorsqu'il est ouvert depuis une IP réseau, mais il est préférable de laisser `VITE_API_URL` commenté.
+
 ## Lancement
 
 ```bash
@@ -53,6 +55,8 @@ Vite écoute aussi sur le réseau local (`host: true`). L'URL réseau s'affiche 
 Pour connaître l'IP du PC : `ipconfig getifaddr en0` (macOS) ou `hostname -I` (Linux).
 
 Aucun changement de `.env` n'est requis : l'API est joignable sur `http://<IP-du-PC>:8000` automatiquement.
+
+Ne pas définir `VITE_API_URL=http://localhost:8000` pour les tests mobile — utiliser l'IP du PC ou laisser la déduction automatique.
 
 ## Scripts disponibles
 

@@ -40,7 +40,7 @@ export default function Register() {
       const data = await login({ email: form.email, password: form.password })
       navigate(getDashboardBasePath(data.role))
     } catch (err) {
-      setError(getApiErrorMessage(err, "Impossible de créer le compte"))
+      setError(getApiErrorMessage(err, 'Inscription impossible. Réessayez.'))
     } finally {
       setLoading(false)
     }

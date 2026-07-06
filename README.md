@@ -138,6 +138,8 @@ http://192.168.x.x:5173
 
 L'API est contactée automatiquement sur `http://192.168.x.x:8000` (même hôte que le frontend). Aucune modification de `.env` n'est nécessaire tant que le backend tourne sur le port 8000.
 
+> **Important :** ne définissez pas `VITE_API_URL=http://localhost:8000` dans `frontend/.env` si vous testez depuis un téléphone ou une tablette. Sur un appareil mobile, `localhost` désigne l'appareil lui-même, pas le PC serveur. Laissez `VITE_API_URL` commenté (comportement par défaut) ou utilisez l'IP locale du PC (`http://192.168.x.x:8000`).
+
 > **PC :** l'accès via `http://localhost:5173` continue de fonctionner normalement.
 
 ## Navigation
