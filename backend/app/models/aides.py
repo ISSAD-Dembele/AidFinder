@@ -22,6 +22,8 @@ class Aides(Base):
     content_hash = Column(String)
     date_creation = Column(DateTime, default=datetime.utcnow)
     derniere_mise_a_jour = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    url_officielle = Column(String)
+    image_url = Column(String)
     
     #les relations avec les autres tables
     resultats_chatbots = relationship("ResultatChatbot", back_populates="aide")

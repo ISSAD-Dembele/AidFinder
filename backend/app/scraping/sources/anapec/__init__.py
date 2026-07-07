@@ -1,0 +1,1 @@
+from .news import scrape_news

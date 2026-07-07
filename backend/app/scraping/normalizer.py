@@ -118,6 +118,8 @@ def normalize_record(data):
         "niveau_etude_requis": normalize_level(data.get("niveau_etude_requis")),
         "statut_socio_pro_requis": normalize_status(data.get("statut_socio_pro_requis")),
         "handicap_requis": normalize_boolean(data.get("handicap_requis")),
+        "url_officielle": normalize_text(data.get("url_officielle")),
+        "image_url": normalize_text(data.get("image_url")),
     }
 
     normalized["content_hash"] = generate_content_hash(normalized)

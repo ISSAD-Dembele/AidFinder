@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 
 def request_with_retry(url, headers=None, retries=3, timeout=10):
     "effectue une requête HTTP avec des tentatives en cas d'échec"
+    if headers is None:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/137.0.0.0 Safari/537.36"
+            )
+        }
     for attempt in range(retries):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)

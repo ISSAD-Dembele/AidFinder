@@ -4,7 +4,8 @@ from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
 from app.core.config import CORS_ORIGINS, CORS_ORIGIN_REGEX
 from fastapi.staticfiles import StaticFiles
-import os
+import os, threading
+from app.scraping.scheduler import start_scheduler
 
 app = FastAPI()
 
@@ -25,3 +26,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 @app.get("/")
 def home():
     return {"message": "Bienvenue sur AidFinder"}
+@app.on_event("startup")
+def startup_event():
+    threading.Thread(target=start_scheduler, daemon=True).start()
