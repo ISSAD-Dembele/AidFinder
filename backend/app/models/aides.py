@@ -24,6 +24,7 @@ class Aides(Base):
     derniere_mise_a_jour = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     url_officielle = Column(String)
     image_url = Column(String)
+    est_active = Column(Boolean, default=True, nullable=False)
     
     #les relations avec les autres tables
     resultats_chatbots = relationship("ResultatChatbot", back_populates="aide")

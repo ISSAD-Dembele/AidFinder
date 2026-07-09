@@ -75,8 +75,10 @@ def login_user(db: Session, user: UserLogin):
     if est_desactive_par_utilisateur(bd_user.statut_compte):
         bd_user.statut_compte = ACTIF
         bd_user.date_desactivation = None
-        db.commit()
-        db.refresh(bd_user)
+
+    bd_user.date_derniere_connexion = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(bd_user)
 
     return _generate_login_response(bd_user)
 

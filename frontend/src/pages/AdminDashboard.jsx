@@ -1,24 +1,66 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ProfileAvatar from '@/src/components/profile/ProfileAvatar'
 import { useProfile } from '@/src/contexts/ProfileContext'
+import { useEffect, useState } from 'react'
+import adminService from '@/src/services/admin'
 
-const STATS = [
-  { label: 'utilisateurs', value: '888' },
-  { label: 'conversations', value: '1008' },
-  { label: 'PDF Téléchargées', value: '101' },
-  { label: 'Aides publiés', value: '300' },
-]
+function formatDate(value) {
+  if (!value) return '-'
+  return new Intl.DateTimeFormat('fr-FR').format(new Date(value))
+}
 
-const RECENT_AIDES = [
-  { title: "Bourses d'excellence 2024", source: "Ministère de l'enseignement", date: '12/05/2024' },
-  { title: 'Aide au logement', source: 'Agence Nationale', date: '10/05/2024' },
-  { title: 'Subvention agricole', source: 'Ministère de l\'agriculture', date: '08/05/2024' },
-  { title: 'Prime à la naissance', source: 'Caisse Nationale', date: '05/05/2024' },
-]
+function buildBars(statistics) {
+  const users = statistics?.evolution_utilisateurs?.slice(-7) || []
+  const conversations = statistics?.evolution_conversations?.slice(-7) || []
+  const max = Math.max(
+    1,
+    ...users.map((item) => item.total),
+    ...conversations.map((item) => item.total)
+  )
+  return Array.from({ length: 7 }, (_, index) => ({
+    users: Math.max(8, ((users[index]?.total || 0) / max) * 100),
+    conversations: Math.max(8, ((conversations[index]?.total || 0) / max) * 100),
+  }))
+}
 
 /** Dashboard administrateur — conforme à la maquette Dashbord_admin */
 export default function AdminDashboard() {
   const { profile } = useProfile()
+  const [dashboard, setDashboard] = useState(null)
+  const [aides, setAides] = useState([])
+  const [statistics, setStatistics] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+    Promise.all([
+      adminService.getDashboard(),
+      adminService.getAides(),
+      adminService.getStatistics(),
+    ])
+      .then(([dashboardData, aidesData, statisticsData]) => {
+        if (!mounted) return
+        setDashboard(dashboardData)
+        setAides(aidesData.slice(0, 4))
+        setStatistics(statisticsData)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setDashboard(null)
+        setAides([])
+        setStatistics(null)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const stats = [
+    { label: 'utilisateurs', value: dashboard?.total_utilisateurs ?? 0 },
+    { label: 'conversations', value: dashboard?.total_conversations ?? 0 },
+    { label: 'PDF téléchargés', value: dashboard?.total_pdf_exportes ?? 0 },
+    { label: 'Aides publiées', value: dashboard?.total_aides ?? 0 },
+  ]
+  const bars = buildBars(statistics)
 
   return (
     <div className="flex-1 bg-muted/30">
@@ -49,7 +91,7 @@ export default function AdminDashboard() {
 
         {/* Cartes statistiques */}
         <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {STATS.map((stat) => (
+          {stats.map((stat) => (
             <Card key={stat.label} className="border-border/60 shadow-sm">
               <CardContent className="py-5 text-center">
                 <p className="text-xs text-muted-foreground capitalize sm:text-sm">{stat.label}</p>
@@ -67,15 +109,18 @@ export default function AdminDashboard() {
               <span className="cursor-default text-sm text-[#2963E8]">Voir détails</span>
             </CardHeader>
             <CardContent className="divide-y divide-border/60 p-0 px-6 pb-4">
-              {RECENT_AIDES.map((aide) => (
-                <div key={aide.title} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
+              {aides.map((aide) => (
+                <div key={aide.aide_id} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{aide.title}</p>
-                    <p className="text-xs text-muted-foreground">{aide.source}</p>
+                    <p className="text-sm font-semibold text-foreground">{aide.titre}</p>
+                    <p className="text-xs text-muted-foreground">{aide.source || 'Source non renseignée'}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{aide.date}</span>
+                  <span className="text-xs text-muted-foreground">{formatDate(aide.date_creation)}</span>
                 </div>
               ))}
+              {aides.length === 0 && (
+                <p className="py-4 text-sm text-muted-foreground">Aucune aide disponible.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -90,15 +135,15 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex h-48 items-end justify-between gap-2 rounded-lg bg-muted/40 p-4">
-                {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
+                {bars.map((bar, i) => (
                   <div key={i} className="flex flex-1 flex-col items-center gap-1">
                     <div
                       className="w-full rounded-t bg-purple-400/60"
-                      style={{ height: `${h}%` }}
+                      style={{ height: `${bar.users}%` }}
                     />
                     <div
                       className="w-full rounded-t bg-sky-400/60"
-                      style={{ height: `${h * 0.7}%` }}
+                      style={{ height: `${bar.conversations}%` }}
                     />
                   </div>
                 ))}

@@ -18,6 +18,7 @@ class Utilisateur(Base):
     situation_handicap = Column(Boolean, default=False)
     photo_profil = Column(String, nullable=True)
     date_creation = Column(DateTime)
+    date_derniere_connexion = Column(DateTime, nullable=True)
     date_desactivation = Column(DateTime, nullable=True)
     
     #les relations avec les autres tables
