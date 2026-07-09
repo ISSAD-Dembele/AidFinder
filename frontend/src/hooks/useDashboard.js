@@ -1,24 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
 import dashboardService from '@/src/services/dashboardService'
 
+/**
+ * Hook pour récupérer les données du dashboard utilisateur.
+ * Appelle uniquement /dashboard qui retourne déjà toutes les stats
+ * (nombre_conversations inclus).
+ */
 export default function useDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const fetchDashboard = useCallback(async () => {
-    await Promise.resolve() // Defer rendering to avoid synchronous setState inside useEffect
     setLoading(true)
     setError(null)
     try {
-      const [dashData, statsData] = await Promise.all([
-        dashboardService.getDashboard(),
-        dashboardService.getStats(),
-      ])
-      setData({
-        ...dashData,
-        nombre_conversations: statsData.nombre_conversations,
-      })
+      const dashData = await dashboardService.getDashboard()
+      setData(dashData)
     } catch (err) {
       setError(err)
     } finally {
@@ -27,7 +25,6 @@ export default function useDashboard() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDashboard()
   }, [fetchDashboard])
 

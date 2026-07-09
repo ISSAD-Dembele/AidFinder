@@ -1,39 +1,21 @@
-import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import EmptyState from './EmptyState'
 import { Bookmark, ExternalLink } from 'lucide-react'
 import dashboardService from '@/src/services/dashboardService'
 
-export default function RecentAidsSection() {
-  const [recentAids, setRecentAids] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const fetchRecentAids = async () => {
-    try {
-      const data = await dashboardService.getRecentAids()
-      setRecentAids(data)
-    } catch (err) {
-      setError(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchRecentAids()
-  }, [])
-
+/**
+ * Section "Dernières aides consultées" du dashboard.
+ * Accepte les données via la prop recentAids (fournies par useDashboard).
+ * Enregistre la consultation lors du clic sur "Consulter".
+ */
+export default function RecentAidsSection({ recentAids = [] }) {
   const handleConsult = async (aid) => {
-    if (!aid?.url_officielle) {
-      return
-    }
+    if (!aid?.url_officielle) return
     try {
       await dashboardService.recordAidConsultation(aid.aide_id)
-      fetchRecentAids() // Refresh to update consultation list/order
     } catch {
-      // Ignorer l'erreur d'enregistrement en base
+      // Ignorer l'erreur d'enregistrement — l'ouverture du lien reste prioritaire
     } finally {
       window.open(aid.url_officielle, '_blank', 'noopener,noreferrer')
     }
@@ -42,8 +24,7 @@ export default function RecentAidsSection() {
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
     try {
-      const date = new Date(dateStr)
-      return date.toLocaleDateString('fr-FR', {
+      return new Date(dateStr).toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -53,25 +34,7 @@ export default function RecentAidsSection() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="border-border/60 bg-white">
-            <CardContent className="flex items-center gap-3 p-3 animate-pulse">
-              <div className="size-12 rounded-lg bg-muted shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-3/4 bg-muted rounded" />
-                <div className="h-2.5 w-1/2 bg-muted rounded" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    )
-  }
-
-  if (error || recentAids.length === 0) {
+  if (!recentAids || recentAids.length === 0) {
     return (
       <EmptyState
         title="Aucune aide consultée"
@@ -84,7 +47,9 @@ export default function RecentAidsSection() {
   return (
     <div className="space-y-3">
       {recentAids.map((aid) => {
-        const imageSrc = aid.image_url || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=100&auto=format&fit=crop&q=60'
+        const imageSrc =
+          aid.image_url ||
+          'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=100&auto=format&fit=crop&q=60'
         const categoryName = aid.categorie || aid.type_aide
 
         return (
@@ -95,28 +60,18 @@ export default function RecentAidsSection() {
             <CardContent className="flex items-center gap-3 p-3">
               {/* Thumbnail */}
               <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
-                <img
-                  src={imageSrc}
-                  alt={aid.titre}
-                  className="size-full object-cover"
-                />
+                <img src={imageSrc} alt={aid.titre} className="size-full object-cover" />
               </div>
 
               {/* Info */}
               <div className="min-w-0 flex-1 space-y-0.5">
-                <h4 className="truncate text-xs font-bold text-foreground">
-                  {aid.titre}
-                </h4>
+                <h4 className="truncate text-xs font-bold text-foreground">{aid.titre}</h4>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
                   {categoryName && (
-                    <span className="font-semibold text-[#2963E8]">
-                      {categoryName}
-                    </span>
+                    <span className="font-semibold text-[#2963E8]">{categoryName}</span>
                   )}
                   {aid.date_consultation && (
-                    <span>
-                      • Consulté le {formatDate(aid.date_consultation)}
-                    </span>
+                    <span>• Consulté le {formatDate(aid.date_consultation)}</span>
                   )}
                 </div>
               </div>

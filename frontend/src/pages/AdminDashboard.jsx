@@ -1,157 +1,251 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import ProfileAvatar from '@/src/components/profile/ProfileAvatar'
-import { useProfile } from '@/src/contexts/ProfileContext'
-import { useEffect, useState } from 'react'
-import adminService from '@/src/services/admin'
+import {
+  Users, FileText, FolderOpen, Globe,
+  MessageSquare, Download, UserCheck, UserX, RefreshCw
+} from 'lucide-react'
+import useAdminDashboard from '@/src/hooks/useAdminDashboard'
+import useAdminStats from '@/src/hooks/useAdminStats'
+import { AdminStatsSkeleton } from '@/src/components/admin/AdminSkeletons'
+import AdminErrorState from '@/src/components/admin/AdminErrorState'
 
-function formatDate(value) {
-  if (!value) return '-'
-  return new Intl.DateTimeFormat('fr-FR').format(new Date(value))
-}
-
-function buildBars(statistics) {
-  const users = statistics?.evolution_utilisateurs?.slice(-7) || []
-  const conversations = statistics?.evolution_conversations?.slice(-7) || []
-  const max = Math.max(
-    1,
-    ...users.map((item) => item.total),
-    ...conversations.map((item) => item.total)
+function StatCard({ label, value, icon: Icon, colorClass, bgClass }) {
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
+      <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl border ${bgClass}`}>
+        <Icon className={`size-5 ${colorClass}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-muted-foreground">{label}</p>
+        <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">
+          {value ?? '—'}
+        </p>
+      </div>
+    </div>
   )
-  return Array.from({ length: 7 }, (_, index) => ({
-    users: Math.max(8, ((users[index]?.total || 0) / max) * 100),
-    conversations: Math.max(8, ((conversations[index]?.total || 0) / max) * 100),
-  }))
 }
 
-/** Dashboard administrateur — conforme à la maquette Dashbord_admin */
-export default function AdminDashboard() {
-  const { profile } = useProfile()
-  const [dashboard, setDashboard] = useState(null)
-  const [aides, setAides] = useState([])
-  const [statistics, setStatistics] = useState(null)
+function BarChart({ items, label }) {
+  if (!items || items.length === 0) return (
+    <p className="py-8 text-center text-sm text-muted-foreground">Aucune donnée disponible.</p>
+  )
+  const max = Math.max(1, ...items.map((i) => i.total))
+  return (
+    <div className="space-y-2">
+      {items.slice(0, 8).map((item) => (
+        <div key={item.label} className="flex items-center gap-3">
+          <span className="w-32 truncate text-xs text-muted-foreground text-right">{item.label}</span>
+          <div className="flex-1 h-5 rounded-full bg-muted/50 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[#2963E8] transition-all duration-700"
+              style={{ width: `${Math.max(4, (item.total / max) * 100)}%` }}
+            />
+          </div>
+          <span className="w-8 text-xs font-bold text-foreground text-right">{item.total}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
-  useEffect(() => {
-    let mounted = true
-    Promise.all([
-      adminService.getDashboard(),
-      adminService.getAides(),
-      adminService.getStatistics(),
-    ])
-      .then(([dashboardData, aidesData, statisticsData]) => {
-        if (!mounted) return
-        setDashboard(dashboardData)
-        setAides(aidesData.slice(0, 4))
-        setStatistics(statisticsData)
-      })
-      .catch(() => {
-        if (!mounted) return
-        setDashboard(null)
-        setAides([])
-        setStatistics(null)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  const stats = [
-    { label: 'utilisateurs', value: dashboard?.total_utilisateurs ?? 0 },
-    { label: 'conversations', value: dashboard?.total_conversations ?? 0 },
-    { label: 'PDF téléchargés', value: dashboard?.total_pdf_exportes ?? 0 },
-    { label: 'Aides publiées', value: dashboard?.total_aides ?? 0 },
-  ]
-  const bars = buildBars(statistics)
+function LineChart({ items, color = '#2963E8', label }) {
+  if (!items || items.length === 0) return (
+    <p className="py-8 text-center text-sm text-muted-foreground">Aucune donnée disponible.</p>
+  )
+  const maxVal = Math.max(1, ...items.map((i) => i.total))
+  const width = 400
+  const height = 100
+  const points = items.map((item, i) => ({
+    x: (i / Math.max(1, items.length - 1)) * width,
+    y: height - (item.total / maxVal) * (height - 10),
+    label: item.date,
+    total: item.total,
+  }))
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
 
   return (
-    <div className="flex-1 bg-muted/30">
-      {/* En-tête desktop */}
-      <header className="hidden items-center justify-between border-b border-border bg-white px-6 py-4 lg:flex">
-        <h1 className="text-xl font-bold text-foreground">Tableau de bord</h1>
-        <div className="flex items-center gap-3">
-          <ProfileAvatar photoPath={profile?.photo_profil} name={profile?.nom} className="size-10" />
-          <div className="text-right">
-            <p className="text-sm font-semibold text-foreground">{profile?.nom || 'Admin'}</p>
-            <p className="text-xs text-muted-foreground">Administrateur</p>
-          </div>
+    <div className="w-full">
+      <svg viewBox={`0 0 ${width} ${height + 20}`} className="w-full h-28">
+        <defs>
+          <linearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path
+          d={`${d} L ${width} ${height} L 0 ${height} Z`}
+          fill={`url(#grad-${label})`}
+        />
+        <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3" fill={color} />
+        ))}
+      </svg>
+      <div className="flex justify-between text-[9px] text-muted-foreground mt-1 px-1">
+        {items.length > 1 && (
+          <>
+            <span>{items[0].date}</span>
+            <span>{items[items.length - 1].date}</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Dashboard Administrateur — affiche les 8 statistiques globales + graphiques.
+ */
+export default function AdminDashboard() {
+  const { data, loading, error, refresh } = useAdminDashboard()
+  const { stats, loading: statsLoading } = useAdminStats()
+
+  if (loading) {
+    return (
+      <div className="flex-1 bg-muted/20 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mb-8 space-y-2">
+          <div className="h-7 w-48 bg-muted animate-pulse rounded-md" />
+          <div className="h-4 w-64 bg-muted animate-pulse rounded-md" />
         </div>
-      </header>
+        <AdminStatsSkeleton />
+      </div>
+    )
+  }
 
-      <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        {/* Titre mobile */}
-        <h1 className="mb-6 text-xl font-bold text-foreground lg:hidden">Tableau de bord</h1>
+  if (error) {
+    return (
+      <div className="flex-1 bg-muted/20 flex items-center justify-center">
+        <AdminErrorState
+          description="Impossible de charger les données du tableau de bord."
+          onRetry={refresh}
+        />
+      </div>
+    )
+  }
 
-        <div className="mb-8">
-          <h2 className="text-lg font-bold text-foreground sm:text-xl">
-            Bienvenue, Administrateur !
-          </h2>
+  const statCards = [
+    {
+      label: 'Utilisateurs',
+      value: data?.total_utilisateurs,
+      icon: Users,
+      colorClass: 'text-blue-600',
+      bgClass: 'bg-blue-50 border-blue-100',
+    },
+    {
+      label: 'Aides publiées',
+      value: data?.total_aides,
+      icon: FileText,
+      colorClass: 'text-emerald-600',
+      bgClass: 'bg-emerald-50 border-emerald-100',
+    },
+    {
+      label: 'Catégories',
+      value: data?.total_categories,
+      icon: FolderOpen,
+      colorClass: 'text-violet-600',
+      bgClass: 'bg-violet-50 border-violet-100',
+    },
+    {
+      label: 'Sources',
+      value: data?.total_sources,
+      icon: Globe,
+      colorClass: 'text-sky-600',
+      bgClass: 'bg-sky-50 border-sky-100',
+    },
+    {
+      label: 'Conversations',
+      value: data?.total_conversations,
+      icon: MessageSquare,
+      colorClass: 'text-orange-600',
+      bgClass: 'bg-orange-50 border-orange-100',
+    },
+    {
+      label: 'PDF exportés',
+      value: data?.total_pdf_exportes,
+      icon: Download,
+      colorClass: 'text-pink-600',
+      bgClass: 'bg-pink-50 border-pink-100',
+    },
+    {
+      label: 'Comptes actifs',
+      value: data?.comptes_actifs,
+      icon: UserCheck,
+      colorClass: 'text-green-600',
+      bgClass: 'bg-green-50 border-green-100',
+    },
+    {
+      label: 'Comptes désactivés',
+      value: data?.comptes_desactives,
+      icon: UserX,
+      colorClass: 'text-red-600',
+      bgClass: 'bg-red-50 border-red-100',
+    },
+  ]
+
+  return (
+    <div className="flex-1 bg-muted/20 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 space-y-8">
+      {/* En-tête */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">Tableau de bord</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Voici un aperçu général de la plateforme AidFinder.
+            Vue globale de la plateforme AidFinder
           </p>
         </div>
-
-        {/* Cartes statistiques */}
-        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <Card key={stat.label} className="border-border/60 shadow-sm">
-              <CardContent className="py-5 text-center">
-                <p className="text-xs text-muted-foreground capitalize sm:text-sm">{stat.label}</p>
-                <p className="mt-1 text-2xl font-bold text-foreground sm:text-3xl">{stat.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Aides récentes */}
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Aides récentes</CardTitle>
-              <span className="cursor-default text-sm text-[#2963E8]">Voir détails</span>
-            </CardHeader>
-            <CardContent className="divide-y divide-border/60 p-0 px-6 pb-4">
-              {aides.map((aide) => (
-                <div key={aide.aide_id} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{aide.titre}</p>
-                    <p className="text-xs text-muted-foreground">{aide.source || 'Source non renseignée'}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{formatDate(aide.date_creation)}</span>
-                </div>
-              ))}
-              {aides.length === 0 && (
-                <p className="py-4 text-sm text-muted-foreground">Aucune aide disponible.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Activités — placeholder graphique */}
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Activités du 7 derniers jours</CardTitle>
-              <div className="flex gap-4 pt-2 text-xs">
-                <span className="font-medium text-purple-600">Nouveaux utilisateurs</span>
-                <span className="font-medium text-sky-500">Conversations</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex h-48 items-end justify-between gap-2 rounded-lg bg-muted/40 p-4">
-                {bars.map((bar, i) => (
-                  <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t bg-purple-400/60"
-                      style={{ height: `${bar.users}%` }}
-                    />
-                    <div
-                      className="w-full rounded-t bg-sky-400/60"
-                      style={{ height: `${bar.conversations}%` }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted/50 transition-colors"
+        >
+          <RefreshCw className="size-4" />
+          <span className="hidden sm:inline">Actualiser</span>
+        </button>
       </div>
+
+      {/* Statistiques principales */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {statCards.map((card) => (
+          <StatCard key={card.label} {...card} />
+        ))}
+      </div>
+
+      {/* Graphiques */}
+      {!statsLoading && stats && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Aides par catégorie */}
+          <div className="rounded-xl border border-border/60 bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-base font-bold text-foreground">Aides par catégorie</h3>
+            <BarChart items={stats.aides_par_categorie} label="categories" />
+          </div>
+
+          {/* Aides par région */}
+          <div className="rounded-xl border border-border/60 bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-base font-bold text-foreground">Aides par région</h3>
+            <BarChart items={stats.aides_par_region} label="regions" />
+          </div>
+
+          {/* Évolution utilisateurs */}
+          <div className="rounded-xl border border-border/60 bg-white p-6 shadow-sm">
+            <h3 className="mb-1 text-base font-bold text-foreground">
+              Évolution des utilisateurs
+            </h3>
+            <p className="mb-4 text-xs text-muted-foreground">30 derniers jours</p>
+            <LineChart items={stats.evolution_utilisateurs} color="#2963E8" label="users" />
+          </div>
+
+          {/* Évolution conversations */}
+          <div className="rounded-xl border border-border/60 bg-white p-6 shadow-sm">
+            <h3 className="mb-1 text-base font-bold text-foreground">
+              Évolution des conversations
+            </h3>
+            <p className="mb-4 text-xs text-muted-foreground">30 derniers jours</p>
+            <LineChart items={stats.evolution_conversations} color="#10b981" label="conversations" />
+          </div>
+
+          {/* Sources les plus utilisées */}
+          <div className="rounded-xl border border-border/60 bg-white p-6 shadow-sm lg:col-span-2">
+            <h3 className="mb-4 text-base font-bold text-foreground">Sources les plus utilisées</h3>
+            <BarChart items={stats.sources_les_plus_utilisees} label="sources" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
