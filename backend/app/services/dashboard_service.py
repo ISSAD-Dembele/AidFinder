@@ -1,7 +1,9 @@
-from sqlalchemy import desc, func, or_
+from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
 from app.models.aides import Aides
+from app.models.consultation_aide import ConsultationAide
 from app.models.discussion import Discussion
 from app.models.export_pdf import ExportPDF
 from app.models.historique import Historique
@@ -29,31 +31,62 @@ def calculate_profile_progress(user: Utilisateur) -> int:
     return round((completed / len(PROFILE_FIELDS)) * 100)
 
 
-def _serialize_aid(aide: Aides, score_matching: int | None = None) -> dict:
+def _serialize_aid(
+    aide: Aides,
+    score_matching: int | None = None,
+    date_consultation=None,
+) -> dict:
+    categorie = aide.categorie.nom if aide.categorie else aide.type_aide
     return {
+        "id": aide.aide_id,
         "aide_id": aide.aide_id,
         "titre": aide.titre,
         "description": aide.description,
+        "image": aide.image_url,
         "image_url": aide.image_url,
+        "categorie": categorie,
         "url_officielle": aide.url_officielle,
         "region_cible": aide.region_cible,
         "type_aide": aide.type_aide,
         "score_matching": score_matching,
         "date_creation": aide.date_creation,
+        "date_consultation": date_consultation,
     }
 
 
+def record_aid_consultation(db: Session, user: Utilisateur, aide_id: int) -> ConsultationAide:
+    aide_exists = db.query(Aides.aide_id).filter(Aides.aide_id == aide_id).first()
+    if aide_exists is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aide introuvable.",
+        )
+
+    consultation = ConsultationAide(user_id=user.user_id, aide_id=aide_id)
+    try:
+        db.add(consultation)
+        db.commit()
+        db.refresh(consultation)
+    except Exception:
+        db.rollback()
+        raise
+    return consultation
+
+
+def record_and_get_consulted_aid(db: Session, user: Utilisateur, aide_id: int) -> dict:
+    consultation = record_aid_consultation(db, user, aide_id)
+    aide = db.query(Aides).filter(Aides.aide_id == aide_id).one()
+    return _serialize_aid(aide, date_consultation=consultation.date_consultation)
+
+
 def get_user_stats(db: Session, user: Utilisateur) -> dict:
-    historique_ids = db.query(Historique.historique_id).filter(Historique.user_id == user.user_id)
     nombre_recherches = db.query(func.count(Historique.historique_id)).filter(
         Historique.user_id == user.user_id
     ).scalar() or 0
-    nombre_conversations = db.query(func.count(Discussion.discussion_id)).filter(
-        Discussion.historique_id.in_(historique_ids)
+    nombre_conversations = db.query(func.count(Historique.historique_id)).filter(
+        Historique.user_id == user.user_id
     ).scalar() or 0
-    nombre_recommandations = db.query(func.count(ResultatChatbot.resultat_id)).filter(
-        ResultatChatbot.historique_id.in_(historique_ids)
-    ).scalar() or 0
+    nombre_recommandations = count_user_recommendations(db, user, limit=10)
     nombre_pdf_exportes = db.query(func.count(ExportPDF.export_id)).filter(
         ExportPDF.user_id == user.user_id
     ).scalar() or 0
@@ -134,28 +167,26 @@ def get_recent_conversations(db: Session, user: Utilisateur, limit: int = 5) -> 
 
 
 def get_recent_aids(db: Session, user: Utilisateur, limit: int = 5) -> list[dict]:
-    last_seen = func.max(ResultatChatbot.date_creation).label("last_seen")
     rows = (
-        db.query(Aides, last_seen)
-        .join(ResultatChatbot, ResultatChatbot.aide_id == Aides.aide_id)
-        .join(Historique, Historique.historique_id == ResultatChatbot.historique_id)
-        .filter(Historique.user_id == user.user_id)
-        .group_by(Aides.aide_id)
-        .order_by(desc(last_seen), desc(Aides.aide_id))
+        db.query(Aides, ConsultationAide.date_consultation)
+        .join(ConsultationAide, ConsultationAide.aide_id == Aides.aide_id)
+        .filter(ConsultationAide.user_id == user.user_id)
+        .order_by(desc(ConsultationAide.date_consultation), desc(ConsultationAide.id))
         .limit(limit)
         .all()
     )
-    return [_serialize_aid(aide) for aide, _ in rows]
+    return [_serialize_aid(aide, date_consultation=date_consultation) for aide, date_consultation in rows]
 
 
-def _profile_match_filter(user: Utilisateur):
+def _profile_match_filters(user: Utilisateur):
     filters = []
-    if user.region:
+    ville = getattr(user, "ville", None) or user.region
+    if ville:
         filters.append(
             or_(
                 Aides.region_cible.is_(None),
                 Aides.region_cible.ilike("%Maroc%"),
-                Aides.region_cible.ilike(f"%{user.region}%"),
+                Aides.region_cible.ilike(f"%{ville}%"),
             )
         )
     if user.niveau_etude:
@@ -170,43 +201,91 @@ def _profile_match_filter(user: Utilisateur):
         filters.append(
             or_(
                 Aides.statut_socio_pro_requis.is_(None),
+                Aides.statut_socio_pro_requis.ilike("%Tous%"),
                 Aides.statut_socio_pro_requis.ilike(f"%{user.statut_socio_pro}%"),
             )
         )
-    if user.situation_handicap is not None:
-        filters.append(or_(Aides.handicap_requis.is_(False), Aides.handicap_requis == user.situation_handicap))
     return filters
 
 
+def _recommendation_score(user: Utilisateur):
+    ville = getattr(user, "ville", None) or user.region
+    score_parts = []
+    if ville:
+        score_parts.append(
+            case(
+                (
+                    or_(
+                        Aides.region_cible.ilike(f"%{ville}%"),
+                        Aides.region_cible.ilike("%Maroc%"),
+                    ),
+                    40,
+                ),
+                (Aides.region_cible.is_(None), 20),
+                else_=0,
+            )
+        )
+    if user.statut_socio_pro:
+        score_parts.append(
+            case(
+                (Aides.statut_socio_pro_requis.ilike(f"%{user.statut_socio_pro}%"), 30),
+                (
+                    or_(
+                        Aides.statut_socio_pro_requis.is_(None),
+                        Aides.statut_socio_pro_requis.ilike("%Tous%"),
+                    ),
+                    15,
+                ),
+                else_=0,
+            )
+        )
+    if user.niveau_etude:
+        score_parts.append(
+            case(
+                (Aides.niveau_etude_requis.ilike(f"%{user.niveau_etude}%"), 30),
+                (
+                    or_(
+                        Aides.niveau_etude_requis.is_(None),
+                        Aides.niveau_etude_requis.ilike("%Tous%"),
+                    ),
+                    15,
+                ),
+                else_=0,
+            )
+        )
+    if not score_parts:
+        return case((Aides.aide_id.isnot(None), 0), else_=0)
+    return sum(score_parts)
+
+
+def _recommendation_query(db: Session, user: Utilisateur):
+    score = _recommendation_score(user).label("score_matching")
+    filters = _profile_match_filters(user)
+    query = db.query(Aides, score)
+    if filters:
+        query = query.filter(and_(*filters))
+    if user.situation_handicap is not None:
+        query = query.filter(or_(Aides.handicap_requis.is_(False), Aides.handicap_requis == user.situation_handicap))
+    return query.order_by(desc(score), desc(Aides.date_creation), desc(Aides.aide_id))
+
+
 def get_user_recommendations(db: Session, user: Utilisateur, limit: int = 10) -> list[dict]:
-    best_score = func.max(ResultatChatbot.score_matching).label("score_matching")
-    rows = (
-        db.query(Aides, best_score)
-        .join(ResultatChatbot, ResultatChatbot.aide_id == Aides.aide_id)
-        .join(Historique, Historique.historique_id == ResultatChatbot.historique_id)
-        .filter(Historique.user_id == user.user_id)
-        .group_by(Aides.aide_id)
-        .order_by(desc(best_score), desc(Aides.date_creation), desc(Aides.aide_id))
-        .limit(limit)
-        .all()
-    )
-    if rows:
-        return [_serialize_aid(aide, score_matching) for aide, score_matching in rows]
+    rows = _recommendation_query(db, user).limit(limit).all()
+    if not rows and _profile_match_filters(user):
+        rows = db.query(Aides, _recommendation_score(user).label("score_matching")).order_by(
+            desc(Aides.date_creation), desc(Aides.aide_id)
+        ).limit(limit).all()
+    return [_serialize_aid(aide, int(score_matching or 0)) for aide, score_matching in rows]
 
-    query = db.query(Aides)
-    for filter_clause in _profile_match_filter(user):
-        query = query.filter(filter_clause)
 
-    aids = (
-        query.order_by(desc(Aides.date_creation), desc(Aides.aide_id))
-        .limit(limit)
-        .all()
-    )
-    return [_serialize_aid(aide) for aide in aids]
+def count_user_recommendations(db: Session, user: Utilisateur, limit: int = 10) -> int:
+    subquery = _recommendation_query(db, user).limit(limit).subquery()
+    return db.query(func.count()).select_from(subquery).scalar() or 0
 
 
 def get_user_dashboard(db: Session, user: Utilisateur) -> dict:
     stats = get_user_stats(db, user)
+    recommendations = get_user_recommendations(db, user, limit=5)
     return {
         "nom_utilisateur": user.nom,
         "photo": user.photo_profil,
@@ -214,7 +293,8 @@ def get_user_dashboard(db: Session, user: Utilisateur) -> dict:
         "nombre_recherches": stats["nombre_recherches"],
         "nombre_recommandations": stats["nombre_recommandations"],
         "nombre_pdf_exportes": stats["nombre_pdf_exportes"],
+        "nombre_conversations": stats["nombre_conversations"],
         "dernieres_aides_consultees": get_recent_aids(db, user),
         "dernieres_conversations": get_recent_conversations(db, user),
-        "dernieres_recommandations_ia": get_user_recommendations(db, user, limit=5),
+        "aides_recommandees": recommendations,
     }

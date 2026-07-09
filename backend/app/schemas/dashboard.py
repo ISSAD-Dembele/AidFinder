@@ -4,15 +4,19 @@ from pydantic import BaseModel
 
 
 class DashboardAidResponse(BaseModel):
+    id: int
     aide_id: int
     titre: str
     description: str | None = None
+    image: str | None = None
     image_url: str | None = None
+    categorie: str | None = None
     url_officielle: str | None = None
     region_cible: str | None = None
     type_aide: str | None = None
     score_matching: int | None = None
     date_creation: datetime | None = None
+    date_consultation: datetime | None = None
 
 
 class DashboardConversationResponse(BaseModel):
@@ -47,6 +51,7 @@ class UserDashboardResponse(BaseModel):
     nombre_recherches: int
     nombre_recommandations: int
     nombre_pdf_exportes: int
+    nombre_conversations: int
     dernieres_aides_consultees: list[DashboardAidResponse]
     dernieres_conversations: list[DashboardConversationResponse]
-    dernieres_recommandations_ia: list[DashboardAidResponse]
+    aides_recommandees: list[DashboardAidResponse]

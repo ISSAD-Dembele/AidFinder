@@ -18,10 +18,10 @@ from app.services.dashboard_service import (
     get_user_stats,
 )
 
-router = APIRouter(tags=["Dashboard utilisateur"])
+router = APIRouter(prefix="/dashboard", tags=["Dashboard utilisateur"])
 
 
-@router.get("/dashboard", response_model=UserDashboardResponse)
+@router.get("", response_model=UserDashboardResponse)
 def read_dashboard(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(get_db),

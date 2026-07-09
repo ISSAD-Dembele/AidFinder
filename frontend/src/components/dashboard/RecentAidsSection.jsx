@@ -2,6 +2,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import EmptyState from './EmptyState'
 import { Bookmark, ExternalLink } from 'lucide-react'
+import dashboardService from '@/src/services/dashboardService'
 
 export default function RecentAidsSection({ recentAids = [] }) {
   if (!recentAids || recentAids.length === 0) {
@@ -14,9 +15,14 @@ export default function RecentAidsSection({ recentAids = [] }) {
     )
   }
 
-  const handleConsult = (url) => {
-    if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer')
+  const handleConsult = async (aid) => {
+    if (!aid?.url_officielle) {
+      return
+    }
+    try {
+      await dashboardService.recordAidConsultation(aid.aide_id)
+    } finally {
+      window.open(aid.url_officielle, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -56,7 +62,7 @@ export default function RecentAidsSection({ recentAids = [] }) {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => handleConsult(aid.url_officielle)}
+                onClick={() => handleConsult(aid)}
                 className="shrink-0 text-muted-foreground hover:bg-[#2963E8]/10 hover:text-[#2963E8]"
                 disabled={!aid.url_officielle}
                 aria-label="Consulter"

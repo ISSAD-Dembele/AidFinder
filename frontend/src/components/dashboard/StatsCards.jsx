@@ -48,7 +48,7 @@ export default function StatsCards({
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
     },
     {
-      title: 'Recommandations IA',
+      title: 'Aides recommandées',
       value: recommandations,
       icon: Sparkles,
       color: 'text-amber-600 bg-amber-50 border-amber-100',

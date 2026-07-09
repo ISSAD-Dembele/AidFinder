@@ -2,6 +2,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import EmptyState from './EmptyState'
 import { ExternalLink, Sparkles } from 'lucide-react'
+import dashboardService from '@/src/services/dashboardService'
 
 export default function RecommendationSection({ recommendations = [] }) {
   if (!recommendations || recommendations.length === 0) {
@@ -14,9 +15,14 @@ export default function RecommendationSection({ recommendations = [] }) {
     )
   }
 
-  const handleConsult = (url) => {
-    if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer')
+  const handleConsult = async (aid) => {
+    if (!aid?.url_officielle) {
+      return
+    }
+    try {
+      await dashboardService.recordAidConsultation(aid.aide_id)
+    } finally {
+      window.open(aid.url_officielle, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -76,7 +82,7 @@ export default function RecommendationSection({ recommendations = [] }) {
               {/* Bouton Consulter */}
               <div className="mt-auto pt-4">
                 <Button
-                  onClick={() => handleConsult(aid.url_officielle)}
+                  onClick={() => handleConsult(aid)}
                   className="w-full bg-[#2963E8] hover:bg-[#1e52c7] text-white rounded-lg text-xs font-semibold"
                   disabled={!aid.url_officielle}
                 >

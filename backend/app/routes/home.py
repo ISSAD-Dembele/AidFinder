@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.securite import get_current_user
 from app.database.session import get_db
+from app.models.utilisateurs import Utilisateur
+from app.schemas.dashboard import DashboardAidResponse
 from app.schemas.home import (
     HomeCategoryResponse,
     HomeLatestAidResponse,
     HomeSearchResultResponse,
     HomeStatsResponse,
 )
+from app.services.dashboard_service import record_and_get_consulted_aid
 from app.services.home_service import (
     get_home_categories,
     get_home_stats,
@@ -62,3 +66,17 @@ def search_aids(
     db: Session = Depends(get_db),
 ) -> list[HomeSearchResultResponse]:
     return search_home_aids(db, q)
+
+
+@router.post(
+    "/aids/{aide_id}/consultation",
+    response_model=DashboardAidResponse,
+    summary="Enregistrer la consultation d'une aide",
+    description="Enregistre en base la consultation d'une aide par l'utilisateur connecté.",
+)
+def consult_aid(
+    aide_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DashboardAidResponse:
+    return record_and_get_consulted_aid(db, current_user, aide_id)

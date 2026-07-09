@@ -27,6 +27,7 @@ class Aides(Base):
     
     #les relations avec les autres tables
     resultats_chatbots = relationship("ResultatChatbot", back_populates="aide")
+    consultations = relationship("ConsultationAide", back_populates="aide", cascade="all, delete-orphan")
     documents_requis = relationship("DocumentRequis", back_populates="aide", cascade="all, delete-orphan")
     categorie = relationship("CategorieAide", back_populates="aides")
     source = relationship("SourceAide", back_populates="aides")

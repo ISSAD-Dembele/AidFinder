@@ -3,6 +3,7 @@ import { ArrowUpRight, MapPin, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { getAidImageUrl } from '@/src/utils/aids'
+import homeService from '@/src/services/home'
 
 const PLACEHOLDER_GRADIENT = 'bg-gradient-to-br from-[#2963E8]/20 to-[#2963E8]/5'
 
@@ -10,6 +11,20 @@ const PLACEHOLDER_GRADIENT = 'bg-gradient-to-br from-[#2963E8]/20 to-[#2963E8]/5
 export default function AidCard({ aide }) {
   const imageUrl = getAidImageUrl(aide.image_url)
   const externalUrl = aide.url_officielle
+
+  const handleConsult = async (event) => {
+    if (!externalUrl) {
+      return
+    }
+    event.preventDefault()
+    try {
+      await homeService.recordAidConsultation(aide.aide_id)
+    } catch {
+      // Les visiteurs non connectés peuvent consulter le lien sans suivi utilisateur.
+    } finally {
+      window.open(externalUrl, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <Card className="group overflow-hidden border-border/60 py-0 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
@@ -58,7 +73,7 @@ export default function AidCard({ aide }) {
           asChild
         >
           {externalUrl ? (
-            <a href={externalUrl} target="_blank" rel="noopener noreferrer">
+            <a href={externalUrl} target="_blank" rel="noopener noreferrer" onClick={handleConsult}>
               Voir plus
               <ArrowUpRight className="size-3.5" />
             </a>

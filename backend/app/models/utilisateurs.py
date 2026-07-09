@@ -23,6 +23,7 @@ class Utilisateur(Base):
     #les relations avec les autres tables
     historiques = relationship("Historique", back_populates="utilisateur", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="utilisateur", cascade="all, delete-orphan")
+    consultations_aides = relationship("ConsultationAide", back_populates="utilisateur", cascade="all, delete-orphan")
     
     actions_moderation = relationship("ActionModeration", back_populates="utilisateur")
     administrateur = relationship("Administrateur", back_populates="utilisateur", uselist=False)

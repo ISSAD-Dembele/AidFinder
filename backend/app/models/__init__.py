@@ -8,6 +8,7 @@ from .discussion import Discussion
 from .notification import Notification
 from .action_moderation import ActionModeration
 from .resultat_chat import ResultatChatbot
+from .consultation_aide import ConsultationAide
 from .document_requis import DocumentRequis
 from .export_pdf import ExportPDF
 from .scraping_logs import ScrapingLog

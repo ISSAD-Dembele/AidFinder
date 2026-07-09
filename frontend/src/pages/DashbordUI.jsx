@@ -287,10 +287,10 @@ export default function DashbordUI() {
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
                 <Sparkles className="size-5 text-amber-500 fill-amber-500" />
-                Recommandations IA pour vous
+                Aides recommandées
               </h2>
             </div>
-            <RecommendationSection recommendations={data?.dernieres_recommandations_ia} />
+            <RecommendationSection recommendations={data?.aides_recommandees} />
           </div>
         </div>
 

@@ -23,6 +23,11 @@ export const homeService = {
     const { data } = await api.get('/api/home/search', { params: { q: query } })
     return data
   },
+
+  recordAidConsultation: async (aideId) => {
+    const { data } = await api.post(`/api/home/aids/${aideId}/consultation`)
+    return data
+  },
 }
 
 export default homeService
