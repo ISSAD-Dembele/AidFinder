@@ -3,12 +3,6 @@ import Logo from '@/src/components/Logo'
 import HelpCard from '@/src/components/dashboard/HelpCard'
 import SidebarNavItem from '@/src/components/dashboard/SidebarNavItem'
 
-const NAV_LINKS = [
-  { label: 'Historiques', to: null },
-  { label: 'Profil', to: 'profil' },
-  { label: 'Aides recommandées', to: null },
-]
-
 /** Sidebar du dashboard utilisateur */
 export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavigate }) {
   return (
@@ -18,24 +12,46 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
       </div>
 
       <nav className="flex flex-col gap-1">
+        {/* Nouveau Chat */}
         <SidebarNavItem
-          to={basePath}
-          end
+          to={`${basePath}?view=chat`}
           onClick={() => onNavigate?.()}
         >
           Nouveau Chat
         </SidebarNavItem>
 
-        {NAV_LINKS.map((item) => (
-          <SidebarNavItem
-            key={item.label}
-            to={item.to ? `${basePath}/${item.to}` : null}
-            disabled={!item.to}
-            onClick={() => onNavigate?.()}
-          >
-            {item.label}
-          </SidebarNavItem>
-        ))}
+        {/* Tableau de bord */}
+        <SidebarNavItem
+          to={basePath}
+          end
+          onClick={() => onNavigate?.()}
+        >
+          Tableau de bord
+        </SidebarNavItem>
+
+        {/* Profil */}
+        <SidebarNavItem
+          to={`${basePath}/profil`}
+          onClick={() => onNavigate?.()}
+        >
+          Profil
+        </SidebarNavItem>
+
+        {/* Historiques */}
+        <SidebarNavItem
+          to={`${basePath}?scroll=history`}
+          onClick={() => onNavigate?.()}
+        >
+          Historiques
+        </SidebarNavItem>
+
+        {/* Aides recommandées */}
+        <SidebarNavItem
+          to={`${basePath}?scroll=recommendations`}
+          onClick={() => onNavigate?.()}
+        >
+          Aides recommandées
+        </SidebarNavItem>
 
         <button
           type="button"
