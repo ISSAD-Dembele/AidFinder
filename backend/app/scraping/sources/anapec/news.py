@@ -7,6 +7,9 @@ from app.scraping.normalizer import normalize_record
 
 BASE_URL = "https://anapec.ma"
 START_URL = "https://anapec.ma/blog/posts"
+SOURCE_NAME = "ANAPEC"
+SOURCE_TYPE = "Organisme public"
+CATEGORY_NAME = "Emploi et insertion"
 
 def fetch_listings():
     """Récupère toutes les actualités ANAPEC."""
@@ -74,6 +77,12 @@ def parse_listing(listing):
     if image_element else None)
     
     data = {
+        "source_nom": SOURCE_NAME,
+        "source_url": BASE_URL,
+        "source_type": SOURCE_TYPE,
+        "source_fiable": True,
+        "categorie_nom": CATEGORY_NAME,
+        "categorie_description": "Programmes d'emploi, d'insertion professionnelle et d'accompagnement.",
         "titre": title,
         "description": description,
         "date_limite": None,

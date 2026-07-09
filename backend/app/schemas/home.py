@@ -18,7 +18,10 @@ class HomeLatestAidResponse(BaseModel):
 
 class HomeStatsResponse(BaseModel):
     total_aides: int
+    total_categories: int
     total_sources: int
+    total_utilisateurs: int
+    total_conversations: int
     derniere_mise_a_jour: datetime | None = None
 
 

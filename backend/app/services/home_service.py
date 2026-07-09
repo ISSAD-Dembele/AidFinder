@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.models.aides import Aides
 from app.models.categorie_aide import CategorieAide
+from app.models.discussion import Discussion
 from app.models.source_aide import SourceAide
+from app.models.utilisateurs import Utilisateur
 
 DESCRIPTION_LIMIT = 150
 
@@ -42,12 +44,18 @@ def get_latest_aids(db: Session, limit: int = 6) -> list[dict]:
 def get_home_stats(db: Session) -> dict:
     """Calcule les chiffres publics de la page d'accueil depuis PostgreSQL."""
     total_aides = db.query(func.count(Aides.aide_id)).scalar() or 0
+    total_categories = db.query(func.count(CategorieAide.categorie_id)).scalar() or 0
     total_sources = db.query(func.count(SourceAide.source_id)).scalar() or 0
+    total_utilisateurs = db.query(func.count(Utilisateur.user_id)).scalar() or 0
+    total_conversations = db.query(func.count(Discussion.discussion_id)).scalar() or 0
     derniere_mise_a_jour = db.query(func.max(Aides.derniere_mise_a_jour)).scalar()
 
     return {
         "total_aides": total_aides,
+        "total_categories": total_categories,
         "total_sources": total_sources,
+        "total_utilisateurs": total_utilisateurs,
+        "total_conversations": total_conversations,
         "derniere_mise_a_jour": derniere_mise_a_jour,
     }
 

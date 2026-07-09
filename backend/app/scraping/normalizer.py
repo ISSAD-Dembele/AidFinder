@@ -107,6 +107,12 @@ def normalize_record(data):
     "normalise complètement une aide"
 
     normalized = {
+        "source_nom": normalize_text(data.get("source_nom")),
+        "source_url": normalize_text(data.get("source_url")),
+        "source_type": normalize_text(data.get("source_type")),
+        "source_fiable": normalize_boolean(data.get("source_fiable", True)),
+        "categorie_nom": normalize_text(data.get("categorie_nom")),
+        "categorie_description": normalize_text(data.get("categorie_description")),
         "titre": normalize_title(data.get("titre")),
         "description": normalize_description(data.get("description")),
         "date_limite": normalize_date(data.get("date_limite")),
