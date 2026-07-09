@@ -129,6 +129,10 @@ def get_user_history(db: Session, user: Utilisateur) -> list[dict]:
             "titre_resume": history.titre_resume,
             "nombre_messages": history.nombre_messages,
             "nombre_recommandations": history.nombre_recommandations,
+            "dernier_message": db.query(Discussion.contenu)
+                .filter(Discussion.historique_id == history.historique_id)
+                .order_by(desc(Discussion.date_creation), desc(Discussion.discussion_id))
+                .limit(1).scalar(),
             "date_creation": history.date_creation,
             "date_derniere_activite": history.date_derniere_activite,
         }

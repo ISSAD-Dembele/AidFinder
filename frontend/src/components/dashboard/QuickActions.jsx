@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Download, MessageSquarePlus, Settings, UserPlus, Zap } from 'lucide-react'
+import { MessageSquarePlus, Settings, Zap } from 'lucide-react'
 
-export default function QuickActions({ onStartChat, onExportPDF }) {
+export default function QuickActions({ onStartChat }) {
   const actions = [
     {
       label: 'Nouvelle discussion',
@@ -12,22 +12,6 @@ export default function QuickActions({ onStartChat, onExportPDF }) {
       onClick: onStartChat,
       variant: 'default',
       className: 'bg-[#2963E8] hover:bg-[#1e52c7] text-white',
-    },
-    {
-      label: 'Exporter PDF',
-      description: 'Télécharger les recommandations',
-      icon: Download,
-      onClick: onExportPDF || (() => window.print()),
-      variant: 'outline',
-      className: 'border-border text-foreground hover:bg-muted/50',
-    },
-    {
-      label: 'Compléter le profil',
-      description: 'Ajouter les infos manquantes',
-      icon: UserPlus,
-      to: '/dashboard/profil',
-      variant: 'outline',
-      className: 'border-border text-foreground hover:bg-muted/50',
     },
     {
       label: 'Modifier le profil',
@@ -47,7 +31,7 @@ export default function QuickActions({ onStartChat, onExportPDF }) {
           Actions rapides
         </CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4 lg:grid-cols-1">
+      <CardContent className="grid grid-cols-2 gap-3 p-5 lg:grid-cols-1">
         {actions.map((act, index) => {
           const Icon = act.icon
           const content = (

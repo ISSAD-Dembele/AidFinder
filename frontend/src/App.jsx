@@ -12,6 +12,9 @@ import DashbordUI from '@/src/pages/DashbordUI'
 import AdminDashboard from '@/src/pages/AdminDashboard'
 import Profile from '@/src/pages/Profile'
 import ChangePassword from '@/src/pages/ChangePassword'
+import DiscussionPage from '@/src/pages/DiscussionPage'
+import HistoriquePage from '@/src/pages/HistoriquePage'
+import AidesRecommandeesPage from '@/src/pages/AidesRecommandeesPage'
 import { getDashboardBasePath } from '@/src/utils/navigation'
 
 /** Redirige les utilisateurs connectés vers leur dashboard selon le rôle */
@@ -61,6 +64,10 @@ function AppRoutes() {
         <Route path="dashboard" element={<DashbordUI />} />
         <Route path="dashboard/profil" element={<Profile />} />
         <Route path="dashboard/changer-mot-de-passe" element={<ChangePassword />} />
+        <Route path="dashboard/discussion" element={<DiscussionPage />} />
+        <Route path="dashboard/discussion/:id" element={<DiscussionPage />} />
+        <Route path="dashboard/historique" element={<HistoriquePage />} />
+        <Route path="dashboard/aides-recommandees" element={<AidesRecommandeesPage />} />
       </Route>
 
       {/* Dashboard administrateur */}

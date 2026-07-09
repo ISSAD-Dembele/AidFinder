@@ -14,10 +14,10 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
       <nav className="flex flex-col gap-1">
         {/* Nouveau Chat */}
         <SidebarNavItem
-          to={`${basePath}?view=chat`}
+          to={`${basePath}/discussion`}
           onClick={() => onNavigate?.()}
         >
-          Nouveau Chat
+          Nouvelle discussion
         </SidebarNavItem>
 
         {/* Tableau de bord */}
@@ -39,15 +39,15 @@ export default function Sidebar({ basePath = '/dashboard', onDeactivate, onNavig
 
         {/* Historiques */}
         <SidebarNavItem
-          to={`${basePath}?scroll=history`}
+          to={`${basePath}/historique`}
           onClick={() => onNavigate?.()}
         >
-          Historiques
+          Historique
         </SidebarNavItem>
 
         {/* Aides recommandées */}
         <SidebarNavItem
-          to={`${basePath}?scroll=recommendations`}
+          to={`${basePath}/aides-recommandees`}
           onClick={() => onNavigate?.()}
         >
           Aides recommandées

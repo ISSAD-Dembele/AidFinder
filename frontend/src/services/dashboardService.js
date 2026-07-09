@@ -34,6 +34,27 @@ export const dashboardService = {
     return data
   },
 
+  /** Récupère les détails (messages) d'une discussion */
+  getHistoryDetail: async (historyId) => {
+    const { data } = await api.get(`/dashboard/history/${historyId}`)
+    return data
+  },
+
+  /** Supprime une discussion par son ID */
+  deleteHistory: async (historyId) => {
+    const { data } = await api.delete(`/dashboard/history/${historyId}`)
+    return data
+  },
+
+  /** Envoie un message de discussion (crée ou continue) */
+  sendChatMessage: async (message, historiqueId = null) => {
+    const { data } = await api.post('/dashboard/chat', {
+      message,
+      historique_id: historiqueId,
+    })
+    return data
+  },
+
   recordAidConsultation: async (aideId) => {
     const { data } = await api.post(`/api/home/aids/${aideId}/consultation`)
     return data

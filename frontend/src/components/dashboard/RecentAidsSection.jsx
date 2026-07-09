@@ -1,19 +1,29 @@
+import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import EmptyState from './EmptyState'
 import { Bookmark, ExternalLink } from 'lucide-react'
 import dashboardService from '@/src/services/dashboardService'
 
-export default function RecentAidsSection({ recentAids = [] }) {
-  if (!recentAids || recentAids.length === 0) {
-    return (
-      <EmptyState
-        title="Aucune aide consultée"
-        description="Les aides que vous consultez s'afficheront ici."
-        icon={Bookmark}
-      />
-    )
+export default function RecentAidsSection() {
+  const [recentAids, setRecentAids] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const fetchRecentAids = async () => {
+    try {
+      const data = await dashboardService.getRecentAids()
+      setRecentAids(data)
+    } catch (err) {
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  useEffect(() => {
+    fetchRecentAids()
+  }, [])
 
   const handleConsult = async (aid) => {
     if (!aid?.url_officielle) {
@@ -21,15 +31,61 @@ export default function RecentAidsSection({ recentAids = [] }) {
     }
     try {
       await dashboardService.recordAidConsultation(aid.aide_id)
+      fetchRecentAids() // Refresh to update consultation list/order
+    } catch {
+      // Ignorer l'erreur d'enregistrement en base
     } finally {
       window.open(aid.url_officielle, '_blank', 'noopener,noreferrer')
     }
+  }
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i} className="border-border/60 bg-white">
+            <CardContent className="flex items-center gap-3 p-3 animate-pulse">
+              <div className="size-12 rounded-lg bg-muted shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-3/4 bg-muted rounded" />
+                <div className="h-2.5 w-1/2 bg-muted rounded" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (error || recentAids.length === 0) {
+    return (
+      <EmptyState
+        title="Aucune aide consultée"
+        description="Les aides d'État que vous consultez s'afficheront ici."
+        icon={Bookmark}
+      />
+    )
   }
 
   return (
     <div className="space-y-3">
       {recentAids.map((aid) => {
         const imageSrc = aid.image_url || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=100&auto=format&fit=crop&q=60'
+        const categoryName = aid.categorie || aid.type_aide
 
         return (
           <Card
@@ -51,23 +107,30 @@ export default function RecentAidsSection({ recentAids = [] }) {
                 <h4 className="truncate text-xs font-bold text-foreground">
                   {aid.titre}
                 </h4>
-                {aid.type_aide && (
-                  <span className="inline-block text-[10px] font-semibold text-[#2963E8]">
-                    {aid.type_aide}
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                  {categoryName && (
+                    <span className="font-semibold text-[#2963E8]">
+                      {categoryName}
+                    </span>
+                  )}
+                  {aid.date_consultation && (
+                    <span>
+                      • Consulté le {formatDate(aid.date_consultation)}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Button */}
               <Button
-                variant="ghost"
-                size="icon"
+                variant="outline"
+                size="sm"
                 onClick={() => handleConsult(aid)}
-                className="shrink-0 text-muted-foreground hover:bg-[#2963E8]/10 hover:text-[#2963E8]"
+                className="shrink-0 h-8 text-[11px] font-semibold text-[#2963E8] border-[#2963E8]/20 hover:bg-[#2963E8]/10 hover:border-[#2963E8] transition-colors duration-200"
                 disabled={!aid.url_officielle}
-                aria-label="Consulter"
               >
-                <ExternalLink className="size-4" />
+                Consulter
+                <ExternalLink className="ml-1 size-3" />
               </Button>
             </CardContent>
           </Card>

@@ -32,6 +32,7 @@ class DashboardHistoryResponse(BaseModel):
     titre_resume: str
     nombre_messages: int
     nombre_recommandations: int
+    dernier_message: str | None = None
     date_creation: datetime | None = None
     date_derniere_activite: datetime | None = None
 
