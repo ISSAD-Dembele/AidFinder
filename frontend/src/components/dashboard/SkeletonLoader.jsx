@@ -1,4 +1,79 @@
 import { Skeleton } from '@/components/ui/skeleton'
+import { Bot } from 'lucide-react'
+
+/**
+ * Squelette d'indicateur "IA en train d'écrire" avec 3 points animés.
+ */
+export function ChatTypingIndicator() {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#2963E8]/10 text-[#2963E8]">
+        <Bot className="size-4" />
+      </div>
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-none border border-border/40 bg-muted/40 px-5 py-4">
+        <span className="text-xs text-muted-foreground mr-1">AidFinder IA en train d'écrire</span>
+        <span className="inline-flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="size-1.5 rounded-full bg-[#2963E8]/60 animate-bounce"
+              style={{ animationDelay: `${i * 0.18}s`, animationDuration: '0.9s' }}
+            />
+          ))}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Squelette d'un message de conversation (chargement initial).
+ */
+export function ChatMessageSkeleton() {
+  return (
+    <div className="space-y-6 py-2 animate-pulse">
+      {/* Bot message */}
+      <div className="flex items-start gap-3">
+        <Skeleton className="size-8 rounded-xl shrink-0" />
+        <Skeleton className="h-14 w-2/3 rounded-2xl rounded-tl-none" />
+      </div>
+      {/* User message */}
+      <div className="flex items-start gap-3 justify-end">
+        <Skeleton className="h-10 w-1/2 rounded-2xl rounded-tr-none" />
+        <Skeleton className="size-8 rounded-xl shrink-0" />
+      </div>
+      {/* Bot message */}
+      <div className="flex items-start gap-3">
+        <Skeleton className="size-8 rounded-xl shrink-0" />
+        <Skeleton className="h-20 w-3/4 rounded-2xl rounded-tl-none" />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Squelette d'une carte d'aide recommandée.
+ */
+export function AidCardSkeleton() {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+      <Skeleton className="h-36 w-full rounded-none" />
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+        <div className="space-y-1.5">
+          <div className="flex justify-between">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3 w-10" />
+          </div>
+          <Skeleton className="h-1.5 w-full rounded-full" />
+        </div>
+        <Skeleton className="mt-auto h-9 w-full rounded-lg" />
+      </div>
+    </div>
+  )
+}
 
 export function StatsSkeleton() {
   return (

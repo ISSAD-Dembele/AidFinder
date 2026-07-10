@@ -1,52 +1,92 @@
-import { useState } from 'react'
-import { Mic, Send } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { useRef, useEffect } from 'react'
+import { Send, PlusCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useNavigate } from 'react-router-dom'
 
-/** Zone de saisie du chat en bas du dashboard */
-export default function ChatInput({ onSend, value, onChange }) {
-  const [internalMessage, setInternalMessage] = useState('')
-  const message = value ?? internalMessage
-  const setMessage = onChange ?? setInternalMessage
+/**
+ * Zone de saisie du chat — Textarea auto-resize, Enter pour envoyer, Shift+Enter pour saut de ligne.
+ * @param {object} props
+ * @param {string} props.value - Valeur contrôlée depuis le parent
+ * @param {function} props.onChange - Setter de la valeur
+ * @param {function} props.onSend - Callback appelé avec le texte à envoyer
+ * @param {boolean} props.disabled - Désactive le champ et le bouton pendant l'envoi
+ */
+export default function ChatInput({ onSend, value = '', onChange, disabled = false }) {
+  const textareaRef = useRef(null)
+  const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!message.trim()) return
-    onSend?.(message.trim())
-    setMessage('')
+  // Auto-resize du textarea
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [value])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  const handleSubmit = () => {
+    if (!value.trim() || disabled) return
+    onSend?.(value.trim())
+    onChange?.('')
+  }
+
+  const handleNewChat = () => {
+    navigate('/dashboard/discussion')
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="relative mx-auto w-full max-w-3xl"
-    >
-      <Input
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        placeholder="Décrivez votre situation..."
-        className="h-12 rounded-full border-border pr-24 pl-5 text-sm shadow-sm"
-      />
-      <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
+    <div className="mx-auto w-full max-w-3xl">
+      <div className="flex items-end gap-2 rounded-2xl border border-border/80 bg-white px-4 py-3 shadow-sm transition-shadow focus-within:border-[#2963E8]/60 focus-within:shadow-md">
+        {/* Bouton Nouveau Chat */}
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="text-[#2963E8] hover:bg-[#2963E8]/10"
-          aria-label="Microphone"
+          onClick={handleNewChat}
+          className="mb-0.5 shrink-0 size-8 text-muted-foreground hover:text-[#2963E8] hover:bg-[#2963E8]/10"
+          aria-label="Nouvelle discussion"
+          title="Nouvelle discussion"
         >
-          <Mic className="size-4" />
+          <PlusCircle className="size-5" />
         </Button>
+
+        {/* Textarea auto-resize */}
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Décrivez votre situation... (Shift+Entrée pour un saut de ligne)"
+          disabled={disabled}
+          className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 outline-none min-h-[28px] max-h-40 leading-relaxed disabled:opacity-60"
+          aria-label="Saisir votre message"
+          id="chat-input"
+        />
+
+        {/* Bouton Envoyer */}
         <Button
-          type="submit"
-          variant="ghost"
+          type="button"
+          onClick={handleSubmit}
+          disabled={disabled || !value.trim()}
+          className="mb-0.5 shrink-0 size-8 rounded-xl bg-[#2963E8] text-white shadow-none hover:bg-[#1e52c7] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           size="icon"
-          className="text-[#2963E8] hover:bg-[#2963E8]/10"
-          aria-label="Envoyer"
+          aria-label="Envoyer le message"
+          id="chat-send-btn"
         >
           <Send className="size-4" />
         </Button>
       </div>
-    </form>
+
+      <p className="mt-2 text-center text-[10px] text-muted-foreground/60">
+        AidFinder IA peut faire des erreurs. Vérifiez les informations importantes.
+      </p>
+    </div>
   )
 }
