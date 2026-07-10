@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
 
 from app.core.securite import get_current_user
 from app.database.session import get_db
 from app.models.utilisateurs import Utilisateur
 from app.models.historique import Historique
 from app.models.discussion import Discussion
-from app.core.datetime_utils import as_utc, utc_now
+from app.core.datetime_utils import as_utc
+from app.schemas.chat import ChatMessageRequest, ChatMessageResponse
 from app.schemas.dashboard import (
     DashboardAidResponse,
     DashboardHistoryResponse,
@@ -22,13 +21,9 @@ from app.services.dashboard_service import (
     get_user_recommendations,
     get_user_stats,
 )
+from app.services.chat_service import chat_service
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard utilisateur"])
-
-
-class ChatMessageRequest(BaseModel):
-    historique_id: Optional[int] = None
-    message: str
 
 
 @router.get("", response_model=UserDashboardResponse)
@@ -82,89 +77,18 @@ def read_history_detail(
     }
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatMessageResponse)
 def send_chat_message(
     data: ChatMessageRequest,
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
-    if not data.message or not data.message.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le message ne peut pas être vide."
-        )
-
-    # 1. Récupérer ou créer l'historique
-    if data.historique_id:
-        history_item = db.query(Historique).filter(
-            Historique.historique_id == data.historique_id,
-            Historique.user_id == current_user.user_id
-        ).first()
-        if not history_item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Discussion introuvable.",
-            )
-    else:
-        # Création d'un nouvel historique
-        title = data.message[:40].strip() + ("..." if len(data.message) > 40 else "")
-        history_item = Historique(
-            user_id=current_user.user_id,
-            titre_resume=title
-        )
-    
-    try:
-        if not data.historique_id:
-            db.add(history_item)
-            db.flush()
-
-        # 2. Enregistrer le message de l'utilisateur
-        user_msg = Discussion(
-            historique_id=history_item.historique_id,
-            expediteur="user",
-            contenu=data.message
-        )
-        db.add(user_msg)
-        
-        # 3. Simuler et enregistrer la réponse du chatbot
-        region = current_user.region or "non renseignée"
-        etude = current_user.niveau_etude or "sans diplôme"
-        bot_text = f"Merci pour votre demande : \"{data.message}\". Notre assistant analyse actuellement votre profil ({region}, {etude}) afin de vous proposer les meilleures aides d'État éligibles. Cette fonctionnalité sera entièrement connectée au modèle IA dans la prochaine version."
-        
-        bot_msg = Discussion(
-            historique_id=history_item.historique_id,
-            expediteur="assistant",
-            contenu=bot_text
-        )
-        db.add(bot_msg)
-        
-        # 4. Mettre à jour la date de dernière activité
-        history_item.date_derniere_activite = utc_now()
-        db.commit()
-        db.refresh(user_msg)
-        db.refresh(bot_msg)
-        db.refresh(history_item)
-    except Exception:
-        db.rollback()
-        raise
-    
-    return {
-        "historique_id": history_item.historique_id,
-        "titre_resume": history_item.titre_resume,
-        "date_derniere_activite": as_utc(history_item.date_derniere_activite),
-        "user_message": {
-            "discussion_id": user_msg.discussion_id,
-            "expediteur": "user",
-            "contenu": data.message,
-            "date_creation": as_utc(user_msg.date_creation),
-        },
-        "bot_message": {
-            "discussion_id": bot_msg.discussion_id,
-            "expediteur": "assistant",
-            "contenu": bot_text,
-            "date_creation": as_utc(bot_msg.date_creation),
-        }
-    }
+) -> ChatMessageResponse:
+    return chat_service.handle_message(
+        db=db,
+        user=current_user,
+        message=data.message,
+        historique_id=data.historique_id,
+    )
 
 
 @router.delete("/history/{history_id}")

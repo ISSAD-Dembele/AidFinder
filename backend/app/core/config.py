@@ -12,6 +12,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 
+QWEN_API_KEY = os.getenv("QWEN_API_KEY")
+QWEN_API_URL = os.getenv(
+    "QWEN_API_URL",
+    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+)
+QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen-plus")
+QWEN_TIMEOUT_SECONDS = int(os.getenv("QWEN_TIMEOUT_SECONDS", "30"))
+QWEN_MAX_TOKENS = int(os.getenv("QWEN_MAX_TOKENS", "700"))
+QWEN_TEMPERATURE = float(os.getenv("QWEN_TEMPERATURE", "0.2"))
+
 _default_cors_origins = "http://localhost:5173,http://127.0.0.1:5173"
 CORS_ORIGINS = [
     origin.strip()

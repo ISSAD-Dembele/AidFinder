@@ -36,6 +36,14 @@ SECRET_KEY=votre_cle_secrete
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
+# Qwen / DashScope compatible OpenAI
+QWEN_API_KEY=votre_cle_api_qwen
+QWEN_API_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+QWEN_MODEL=qwen-plus
+QWEN_MAX_TOKENS=700
+QWEN_TEMPERATURE=0.2
+QWEN_TIMEOUT_SECONDS=30
+
 # Serveur (développement)
 HOST=0.0.0.0
 PORT=8000
@@ -97,6 +105,7 @@ backend/
 | PATCH   | `/users/me`        | Modification du profil             | Oui  |
 | PATCH   | `/users/change-password` | Changement du mot de passe   | Oui  |
 | PATCH   | `/users/photo`     | Upload photo de profil (jpg, jpeg, png, webp, heic) | Oui  |
+| POST    | `/dashboard/chat`  | Message chatbot connecté au profil, recommandations et mémoire | Oui |
 
 ## Statuts de compte (`statut_compte`)
 
