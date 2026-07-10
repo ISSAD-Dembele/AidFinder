@@ -3,17 +3,27 @@ import { cn } from '@/lib/utils'
 
 /**
  * Élément de navigation sidebar — fond bleu uniquement au survol ou si actif (NavLink).
+ * Supporte une icône Lucide optionnelle via la prop `icon`.
  */
-export default function SidebarNavItem({ to, end = false, children, onClick, disabled = false }) {
+export default function SidebarNavItem({ to, end = false, children, onClick, disabled = false, icon: Icon }) {
+  const content = (
+    <>
+      {Icon && <Icon className="size-4 shrink-0" />}
+      <span className="truncate">{children}</span>
+    </>
+  )
+
+  const baseClass = 'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-200'
+
   if (disabled || !to) {
     return (
       <span
         className={cn(
-          'block cursor-default rounded-lg bg-transparent px-3 py-2.5 text-sm text-white/90',
-          'transition-all duration-200 hover:bg-[#2963E8] hover:text-white'
+          baseClass,
+          'cursor-default bg-transparent text-white/50'
         )}
       >
-        {children}
+        {content}
       </span>
     )
   }
@@ -25,14 +35,14 @@ export default function SidebarNavItem({ to, end = false, children, onClick, dis
       onClick={onClick}
       className={({ isActive }) =>
         cn(
-          'block rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
+          baseClass,
           isActive
             ? 'bg-[#2963E8] text-white'
             : 'bg-transparent text-white/90 hover:bg-[#2963E8] hover:text-white'
         )
       }
     >
-      {children}
+      {content}
     </NavLink>
   )
 }

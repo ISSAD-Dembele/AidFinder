@@ -6,6 +6,7 @@ import { ListSkeleton } from '@/src/components/dashboard/SkeletonLoader'
 import EmptyState from '@/src/components/dashboard/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/src/contexts/ToastContext'
+import { formatLocalDateTime } from '@/src/utils/date'
 
 export default function HistoriquePage() {
   const [conversations, setConversations] = useState([])
@@ -33,7 +34,7 @@ export default function HistoriquePage() {
   }, [])
 
   const handleDelete = async (e, historyId) => {
-    e.stopPropagation() // Prevent navigating when clicking delete button
+    e.stopPropagation()
     if (!window.confirm('Voulez-vous vraiment supprimer cette conversation ?')) return
 
     setDeletingId(historyId)
@@ -50,22 +51,6 @@ export default function HistoriquePage() {
 
   const handleRowClick = (historyId) => {
     navigate(`/dashboard/discussion/${historyId}`)
-  }
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      return date.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return dateStr
-    }
   }
 
   if (loading) {
@@ -121,33 +106,44 @@ export default function HistoriquePage() {
             <div
               key={conv.historique_id}
               onClick={() => handleRowClick(conv.historique_id)}
-              className="group flex cursor-pointer items-center justify-between rounded-xl border border-border/60 bg-white p-4 shadow-xs transition-all duration-300 hover:border-border hover:shadow-md hover:bg-muted/10"
+              className="group cursor-pointer rounded-xl border border-border/60 bg-white p-4 shadow-xs transition-all duration-300 hover:border-border hover:shadow-md hover:bg-muted/10"
             >
-              <div className="min-w-0 flex-1 pr-4 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
+              {/* Layout : conteneur principal sans overflow caché */}
+              <div className="flex items-start gap-3">
+                {/* Contenu textuel — min-w-0 garantit que truncate fonctionne */}
+                <div className="min-w-0 flex-1 space-y-1">
                   <h4 className="truncate text-sm font-bold text-foreground group-hover:text-[#2963E8] transition-colors duration-200">
                     {conv.titre_resume || 'Discussion sans titre'}
                   </h4>
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Calendar className="size-3" />
-                    {formatDate(conv.date_derniere_activite)}
-                  </span>
-                </div>
-                <p className="truncate text-xs text-muted-foreground">
-                  {conv.dernier_message || 'Pas encore de message.'}
-                </p>
-              </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => handleDelete(e, conv.historique_id)}
-                disabled={deletingId === conv.historique_id}
-                className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
-                aria-label="Supprimer la conversation"
-              >
-                <Trash2 className="size-4" />
-              </Button>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Calendar className="size-3 shrink-0" />
+                    <span className="truncate">{formatLocalDateTime(conv.date_derniere_activite)}</span>
+                  </div>
+
+                  <p className="truncate text-xs text-muted-foreground">
+                    {conv.dernier_message || 'Pas encore de message.'}
+                  </p>
+                </div>
+
+                {/* Bouton Supprimer — shrink-0 empêche le rétrécissement/débordement */}
+                <div className="shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => handleDelete(e, conv.historique_id)}
+                    disabled={deletingId === conv.historique_id}
+                    className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
+                    aria-label="Supprimer la conversation"
+                  >
+                    {deletingId === conv.historique_id ? (
+                      <RefreshCw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           ))
         )}

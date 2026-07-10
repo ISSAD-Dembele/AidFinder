@@ -1,20 +1,33 @@
 import { useNavigate } from 'react-router-dom'
+import { LayoutDashboard, Users, FileText, BarChart2, UserCircle, LogOut, ShieldOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/src/components/Logo'
 import SidebarNavItem from '@/src/components/dashboard/SidebarNavItem'
 import { useAuth } from '@/src/contexts/AuthContext'
 
 const NAV_LINKS = [
-  { label: 'Utilisateurs', to: null },
-  { label: 'Aides', to: null },
-  { label: 'Statistiques', to: null },
-  { label: 'Paramètres', to: 'profil' },
+  { label: 'Tableau de bord', to: '', icon: LayoutDashboard, end: true },
+  { label: 'Utilisateurs', to: 'utilisateurs', icon: Users },
+  { label: 'Aides', to: 'aides', icon: FileText },
+  { label: 'Statistiques', to: 'statistiques', icon: BarChart2 },
+  { label: 'Profil', to: 'profil', icon: UserCircle },
 ]
 
-/** Sidebar du dashboard administrateur — conforme à la maquette Dashbord_admin */
+/** Sidebar du dashboard administrateur */
 export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavigate }) {
   const { logout } = useAuth()
   const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    onNavigate?.()
+    navigate('/')
+  }
+
+  const handleDeactivate = () => {
+    onDeactivate?.()
+    onNavigate?.()
+  }
 
   return (
     <div className="flex h-full flex-col px-5 py-6 lg:py-8">
@@ -22,51 +35,49 @@ export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavi
         <Logo linkTo={basePath} />
       </div>
 
-      <nav className="flex flex-col gap-1">
-        <SidebarNavItem to={basePath} end onClick={() => onNavigate?.()}>
-          Tableau de bord
-        </SidebarNavItem>
-
+      {/* Navigation principale */}
+      <nav className="flex flex-1 flex-col gap-1">
         {NAV_LINKS.map((item) => (
           <SidebarNavItem
             key={item.label}
-            to={item.to ? `${basePath}/${item.to}` : null}
-            disabled={!item.to}
+            to={item.to ? `${basePath}/${item.to}` : basePath}
+            end={item.end}
             onClick={() => onNavigate?.()}
+            icon={item.icon}
           >
             {item.label}
           </SidebarNavItem>
         ))}
+      </nav>
 
+      {/* Actions du bas */}
+      <div className="mt-6 border-t border-white/10 pt-4 space-y-1">
+        {/* Déconnexion */}
         <button
           type="button"
-          onClick={() => {
-            logout()
-            onNavigate?.()
-            navigate('/')
-          }}
+          onClick={handleLogout}
           className={cn(
-            'block w-full rounded-lg bg-transparent px-3 py-2.5 text-left text-sm text-white/90',
-            'transition-all duration-200 hover:bg-[#2963E8] hover:text-white'
+            'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm text-white/80',
+            'transition-all duration-200 hover:bg-white/10 hover:text-white'
           )}
         >
+          <LogOut className="size-4 shrink-0" />
           Déconnexion
         </button>
 
+        {/* Désactivation du compte */}
         <button
           type="button"
-          onClick={() => {
-            onDeactivate()
-            onNavigate?.()
-          }}
+          onClick={handleDeactivate}
           className={cn(
-            'block w-full rounded-lg bg-transparent px-3 py-2.5 text-left text-sm text-white/90',
-            'transition-all duration-200 hover:bg-[#2963E8] hover:text-white'
+            'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm text-red-400/80',
+            'transition-all duration-200 hover:bg-red-500/10 hover:text-red-400'
           )}
         >
-          Désactivation du compte
+          <ShieldOff className="size-4 shrink-0" />
+          Désactiver mon compte
         </button>
-      </nav>
+      </div>
     </div>
   )
 }

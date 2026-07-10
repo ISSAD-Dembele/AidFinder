@@ -10,6 +10,9 @@ import Register from '@/src/pages/Register'
 import Login from '@/src/pages/Login'
 import DashbordUI from '@/src/pages/DashbordUI'
 import AdminDashboard from '@/src/pages/AdminDashboard'
+import AdminUsers from '@/src/pages/admin/AdminUsers'
+import AdminAides from '@/src/pages/admin/AdminAides'
+import AdminStats from '@/src/pages/admin/AdminStats'
 import Profile from '@/src/pages/Profile'
 import ChangePassword from '@/src/pages/ChangePassword'
 import DiscussionPage from '@/src/pages/DiscussionPage'
@@ -79,6 +82,9 @@ function AppRoutes() {
         }
       >
         <Route path="admin" element={<AdminDashboard />} />
+        <Route path="admin/utilisateurs" element={<AdminUsers />} />
+        <Route path="admin/aides" element={<AdminAides />} />
+        <Route path="admin/statistiques" element={<AdminStats />} />
         <Route path="admin/profil" element={<Profile />} />
         <Route path="admin/changer-mot-de-passe" element={<ChangePassword />} />
       </Route>
