@@ -41,10 +41,13 @@ def register_user(db: Session, user: UserCreate):
         date_creation=utc_now()
     )
     
-    # Add the new user to the database
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except Exception:
+        db.rollback()
+        raise
     
     return new_user
 
@@ -75,9 +78,13 @@ def login_user(db: Session, user: UserLogin):
         bd_user.statut_compte = ACTIF
         bd_user.date_desactivation = None
 
-    bd_user.date_derniere_connexion = utc_now()
-    db.commit()
-    db.refresh(bd_user)
+    try:
+        bd_user.date_derniere_connexion = utc_now()
+        db.commit()
+        db.refresh(bd_user)
+    except Exception:
+        db.rollback()
+        raise
 
     return _generate_login_response(bd_user)
 
@@ -95,9 +102,12 @@ def deactivate_user(db: Session, current_user: Utilisateur):
 
     # Désactivation volontaire — distincte d'une suspension admin
     current_user.statut_compte = DESACTIVE_UTILISATEUR
-    current_user.date_desactivation = utc_now()
-        
-    db.commit()
-    db.refresh(current_user)
+    try:
+        current_user.date_desactivation = utc_now()
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
         
     return {"message": "Compte désactivé avec succès"}

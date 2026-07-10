@@ -112,36 +112,41 @@ def send_chat_message(
             user_id=current_user.user_id,
             titre_resume=title
         )
-        db.add(history_item)
+    
+    try:
+        if not data.historique_id:
+            db.add(history_item)
+            db.flush()
+
+        # 2. Enregistrer le message de l'utilisateur
+        user_msg = Discussion(
+            historique_id=history_item.historique_id,
+            expediteur="user",
+            contenu=data.message
+        )
+        db.add(user_msg)
+        
+        # 3. Simuler et enregistrer la réponse du chatbot
+        region = current_user.region or "non renseignée"
+        etude = current_user.niveau_etude or "sans diplôme"
+        bot_text = f"Merci pour votre demande : \"{data.message}\". Notre assistant analyse actuellement votre profil ({region}, {etude}) afin de vous proposer les meilleures aides d'État éligibles. Cette fonctionnalité sera entièrement connectée au modèle IA dans la prochaine version."
+        
+        bot_msg = Discussion(
+            historique_id=history_item.historique_id,
+            expediteur="assistant",
+            contenu=bot_text
+        )
+        db.add(bot_msg)
+        
+        # 4. Mettre à jour la date de dernière activité
+        history_item.date_derniere_activite = utc_now()
         db.commit()
+        db.refresh(user_msg)
+        db.refresh(bot_msg)
         db.refresh(history_item)
-    
-    # 2. Enregistrer le message de l'utilisateur
-    user_msg = Discussion(
-        historique_id=history_item.historique_id,
-        expediteur="user",
-        contenu=data.message
-    )
-    db.add(user_msg)
-    
-    # 3. Simuler et enregistrer la réponse du chatbot
-    region = current_user.region or "non renseignée"
-    etude = current_user.niveau_etude or "sans diplôme"
-    bot_text = f"Merci pour votre demande : \"{data.message}\". Notre assistant analyse actuellement votre profil ({region}, {etude}) afin de vous proposer les meilleures aides d'État éligibles. Cette fonctionnalité sera entièrement connectée au modèle IA dans la prochaine version."
-    
-    bot_msg = Discussion(
-        historique_id=history_item.historique_id,
-        expediteur="assistant",
-        contenu=bot_text
-    )
-    db.add(bot_msg)
-    
-    # 4. Mettre à jour la date de dernière activité
-    history_item.date_derniere_activite = utc_now()
-    db.commit()
-    db.refresh(user_msg)
-    db.refresh(bot_msg)
-    db.refresh(history_item)
+    except Exception:
+        db.rollback()
+        raise
     
     return {
         "historique_id": history_item.historique_id,

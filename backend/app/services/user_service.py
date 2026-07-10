@@ -12,11 +12,14 @@ def get_user_profile(current_user: Utilisateur):
 
 def update_user_profile(db: Session, current_user: Utilisateur, data: UserProfileUpdate):
     update_data = data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(current_user, key, value)
-        
-    db.commit()
-    db.refresh(current_user)
+    try:
+        for key, value in update_data.items():
+            setattr(current_user, key, value)
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
     
     return current_user
 
@@ -38,9 +41,13 @@ def change_user_password(db: Session, current_user: Utilisateur, data: ChangePas
             detail="Le nouveau mot de passe ne peut pas être le même que l'ancien."
         )
     
-    current_user.mot_de_passe_hash = hash_password(data.new_password)
-    db.commit()
-    db.refresh(current_user)
+    try:
+        current_user.mot_de_passe_hash = hash_password(data.new_password)
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
     
     return {"message": "Mot de passe mis à jour avec succès."}
 
@@ -87,8 +94,12 @@ def upload_profile_photo(db: Session, current_user: Utilisateur, file: UploadFil
     file.file.close()  # fermer le fichier après l'avoir utilisé
     
     # Mettre à jour la base
-    current_user.photo_profil = db_path
-    db.commit()
-    db.refresh(current_user)
+    try:
+        current_user.photo_profil = db_path
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
     
     return {"message": "Photo de profil mise à jour avec succès.", "photo_profil": db_path}
