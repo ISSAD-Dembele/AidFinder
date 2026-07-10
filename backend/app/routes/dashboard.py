@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
 
 from app.core.securite import get_current_user
 from app.database.session import get_db
 from app.models.utilisateurs import Utilisateur
 from app.models.historique import Historique
 from app.models.discussion import Discussion
+from app.core.datetime_utils import as_utc, utc_now
 from app.schemas.dashboard import (
     DashboardAidResponse,
     DashboardHistoryResponse,
@@ -69,13 +69,13 @@ def read_history_detail(
     return {
         "historique_id": history_item.historique_id,
         "titre_resume": history_item.titre_resume,
-        "date_creation": history_item.date_creation,
+        "date_creation": as_utc(history_item.date_creation),
         "messages": [
             {
                 "discussion_id": d.discussion_id,
                 "expediteur": d.expediteur,
                 "contenu": d.contenu,
-                "date_creation": d.date_creation
+                "date_creation": as_utc(d.date_creation)
             }
             for d in discussions
         ]
@@ -137,19 +137,27 @@ def send_chat_message(
     db.add(bot_msg)
     
     # 4. Mettre à jour la date de dernière activité
-    history_item.date_derniere_activite = datetime.utcnow()
+    history_item.date_derniere_activite = utc_now()
     db.commit()
+    db.refresh(user_msg)
+    db.refresh(bot_msg)
+    db.refresh(history_item)
     
     return {
         "historique_id": history_item.historique_id,
         "titre_resume": history_item.titre_resume,
+        "date_derniere_activite": as_utc(history_item.date_derniere_activite),
         "user_message": {
+            "discussion_id": user_msg.discussion_id,
             "expediteur": "user",
-            "contenu": data.message
+            "contenu": data.message,
+            "date_creation": as_utc(user_msg.date_creation),
         },
         "bot_message": {
+            "discussion_id": bot_msg.discussion_id,
             "expediteur": "assistant",
-            "contenu": bot_text
+            "contenu": bot_text,
+            "date_creation": as_utc(bot_msg.date_creation),
         }
     }
 
@@ -196,4 +204,3 @@ def read_stats(
     db: Session = Depends(get_db),
 ) -> UserStatsResponse:
     return get_user_stats(db, current_user)
-

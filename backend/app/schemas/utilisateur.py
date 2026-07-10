@@ -1,5 +1,7 @@
 from datetime import datetime, date
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer
+
+from app.core.datetime_utils import as_utc
 
 class UserCreate(BaseModel):
     
@@ -22,6 +24,7 @@ class UploadPhotoResponse(BaseModel):
 class UserProfileUpdate(BaseModel):
     nom: str | None = None
     date_naissance: date | None = None
+    ville: str | None = None
     region: str | None = None
     niveau_etude: str | None = None
     statut_socio_pro: str | None = None
@@ -36,6 +39,7 @@ class UserProfileResponse(BaseModel):
     statut_compte: str
     
     date_naissance: date | None = None
+    ville: str | None = None
     region: str | None = None
     niveau_etude: str | None = None
     statut_socio_pro: str | None = None
@@ -43,6 +47,10 @@ class UserProfileResponse(BaseModel):
     photo_profil: str | None = None
     date_creation: datetime
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("date_creation")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 class ChangePassword(BaseModel):
     current_password: str
@@ -56,8 +64,13 @@ class UserResponse(BaseModel):
     role: str
     statut_compte: str
     date_naissance: date | None=None
+    ville: str | None = None
     date_creation: datetime
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("date_creation")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
     
 class Token(BaseModel):
     access_token: str

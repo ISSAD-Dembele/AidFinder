@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, Date, Float
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.database.database import Base
+from app.core.datetime_utils import utc_now
 
 class Aides(Base):
     __tablename__="aides"
@@ -20,8 +20,8 @@ class Aides(Base):
     statut_socio_pro_requis = Column(String)
     handicap_requis = Column(Boolean)
     content_hash = Column(String)
-    date_creation = Column(DateTime, default=datetime.utcnow)
-    derniere_mise_a_jour = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    date_creation = Column(DateTime(timezone=True), default=utc_now)
+    derniere_mise_a_jour = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     url_officielle = Column(String)
     image_url = Column(String)
     est_active = Column(Boolean, default=True, nullable=False)

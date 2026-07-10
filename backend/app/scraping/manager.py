@@ -3,6 +3,7 @@ from app.scraping.storage import save_records
 from app.database.database import SessionLocal
 from app.models.scraping_logs import ScrapingLog
 from datetime import datetime
+from app.core.datetime_utils import utc_now
 
 
 SCRAPERS = [
@@ -51,12 +52,12 @@ def run_all_scrapers():
     "Lance tous les scrapers et retourne une liste de tous les enregistrements"
     all_records = []
     for scraper in SCRAPERS:
-        started_at = datetime.utcnow()
+        started_at = utc_now()
         try:
             records = scraper()
             save_records(records)
             all_records.extend(records)
-            finished_at = datetime.utcnow()
+            finished_at = utc_now()
             _save_scraping_log(
                 source=_source_name(scraper, records),
                 started_at=started_at,
@@ -65,7 +66,7 @@ def run_all_scrapers():
                 status="success",
             )
         except Exception as e:
-            finished_at = datetime.utcnow()
+            finished_at = utc_now()
             _save_scraping_log(
                 source=scraper.__name__,
                 started_at=started_at,

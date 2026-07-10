@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from .export_resultat import export_resultat
-from datetime import datetime
+from app.core.datetime_utils import utc_now
 from app.database.database import Base
 
 class ResultatChatbot(Base):
@@ -11,7 +11,7 @@ class ResultatChatbot(Base):
     historique_id = Column(Integer, ForeignKey("historiques.historique_id"), nullable=False)
     aide_id = Column(Integer, ForeignKey("aides.aide_id"), nullable=False)
     score_matching = Column(Integer)
-    date_creation = Column(DateTime, default=datetime.utcnow)
+    date_creation = Column(DateTime(timezone=True), default=utc_now)
     
     #les relations avec les autres tables
     historique = relationship("Historique", back_populates="resultats_chatbots")

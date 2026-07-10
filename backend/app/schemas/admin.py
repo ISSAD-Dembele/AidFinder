@@ -1,6 +1,8 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, field_serializer
+
+from app.core.datetime_utils import as_utc
 
 
 class AdminDashboardStatsResponse(BaseModel):
@@ -21,6 +23,7 @@ class AdminUserResponse(BaseModel):
     role: str
     statut_compte: str
     date_naissance: date | None = None
+    ville: str | None = None
     region: str | None = None
     niveau_etude: str | None = None
     statut_socio_pro: str | None = None
@@ -32,6 +35,10 @@ class AdminUserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_serializer("date_creation", "date_derniere_connexion", "date_desactivation")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
+
 
 class AdminUserUpdate(BaseModel):
     nom: str | None = None
@@ -39,6 +46,7 @@ class AdminUserUpdate(BaseModel):
     role: str | None = None
     statut_compte: str | None = None
     date_naissance: date | None = None
+    ville: str | None = None
     region: str | None = None
     niveau_etude: str | None = None
     statut_socio_pro: str | None = None
@@ -96,6 +104,10 @@ class AdminAideResponse(AdminAideBase):
     date_creation: datetime | None = None
     derniere_mise_a_jour: datetime | None = None
 
+    @field_serializer("date_creation", "derniere_mise_a_jour")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
+
 
 class AdminSourceResponse(BaseModel):
     source_id: int
@@ -108,6 +120,10 @@ class AdminSourceResponse(BaseModel):
     dernier_scraping: datetime | None = None
     statut: str
 
+    @field_serializer("dernier_scraping")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
+
 
 class AdminSourceScrapeResponse(BaseModel):
     message: str
@@ -115,6 +131,10 @@ class AdminSourceScrapeResponse(BaseModel):
     source: str
     records: int
     dernier_scraping: datetime | None = None
+
+    @field_serializer("dernier_scraping")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 
 class StatItem(BaseModel):
@@ -132,6 +152,7 @@ class AdminStatsResponse(BaseModel):
     aides_par_region: list[StatItem]
     evolution_utilisateurs: list[EvolutionItem]
     evolution_conversations: list[EvolutionItem]
+    evolution_exports_pdf: list[EvolutionItem]
     sources_les_plus_utilisees: list[StatItem]
 
 
@@ -150,6 +171,10 @@ class AdminScrapeLogResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_serializer("started_at", "finished_at", "created_at")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
+
 
 class AdminConnectionLogResponse(BaseModel):
     user_id: int
@@ -157,6 +182,10 @@ class AdminConnectionLogResponse(BaseModel):
     email: EmailStr
     role: str
     date_derniere_connexion: datetime | None = None
+
+    @field_serializer("date_derniere_connexion")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 
 class AdminLogsResponse(BaseModel):

@@ -10,7 +10,7 @@ class SourceAide(Base):
     url = Column(String, nullable=False)
     type_source = Column(String)
     est_fiable = Column(Boolean, default=True)
-    derniere_collecte = Column(DateTime)
+    derniere_collecte = Column(DateTime(timezone=True))
     
     #les relations avec les autres tables
     aides = relationship("Aides", back_populates="source")

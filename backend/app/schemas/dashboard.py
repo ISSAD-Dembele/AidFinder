@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_serializer
+
+from app.core.datetime_utils import as_utc
 
 
 class DashboardAidResponse(BaseModel):
@@ -15,8 +17,14 @@ class DashboardAidResponse(BaseModel):
     region_cible: str | None = None
     type_aide: str | None = None
     score_matching: int | None = None
+    compatibilite: int | None = None
+    raisons: list[str] = Field(default_factory=list)
     date_creation: datetime | None = None
     date_consultation: datetime | None = None
+
+    @field_serializer("date_creation", "date_consultation")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 
 class DashboardConversationResponse(BaseModel):
@@ -25,6 +33,10 @@ class DashboardConversationResponse(BaseModel):
     dernier_message: str | None = None
     date_creation: datetime | None = None
     date_derniere_activite: datetime | None = None
+
+    @field_serializer("date_creation", "date_derniere_activite")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 
 class DashboardHistoryResponse(BaseModel):
@@ -35,6 +47,10 @@ class DashboardHistoryResponse(BaseModel):
     dernier_message: str | None = None
     date_creation: datetime | None = None
     date_derniere_activite: datetime | None = None
+
+    @field_serializer("date_creation", "date_derniere_activite")
+    def serialize_datetime(self, value: datetime | None):
+        return as_utc(value)
 
 
 class UserStatsResponse(BaseModel):

@@ -12,14 +12,15 @@ class Utilisateur(Base):
     role = Column(String, nullable=False)
     statut_compte = Column(String, nullable=False)  # actif | desactive_utilisateur | suspendu_admin
     date_naissance = Column(Date)
+    ville = Column(String)
     region = Column(String)
     niveau_etude = Column(String)
     statut_socio_pro = Column(String)
     situation_handicap = Column(Boolean, default=False)
     photo_profil = Column(String, nullable=True)
-    date_creation = Column(DateTime)
-    date_derniere_connexion = Column(DateTime, nullable=True)
-    date_desactivation = Column(DateTime, nullable=True)
+    date_creation = Column(DateTime(timezone=True))
+    date_derniere_connexion = Column(DateTime(timezone=True), nullable=True)
+    date_desactivation = Column(DateTime(timezone=True), nullable=True)
     
     #les relations avec les autres tables
     historiques = relationship("Historique", back_populates="utilisateur", cascade="all, delete-orphan")

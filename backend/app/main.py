@@ -50,10 +50,50 @@ def ensure_database_schema():
 def ensure_runtime_columns():
     if engine.dialect.name != "postgresql":
         return
-    statements = (
+    add_column_statements = (
         "ALTER TABLE aides ADD COLUMN IF NOT EXISTS est_active BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville VARCHAR",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_derniere_connexion TIMESTAMP NULL",
     )
+    utc_datetime_columns = (
+        ("utilisateurs", "date_creation"),
+        ("utilisateurs", "date_derniere_connexion"),
+        ("utilisateurs", "date_desactivation"),
+        ("historiques", "date_creation"),
+        ("historiques", "date_derniere_activite"),
+        ("discussions", "date_creation"),
+        ("aides", "date_creation"),
+        ("aides", "derniere_mise_a_jour"),
+        ("consultations_aides", "date_consultation"),
+        ("exports_pdf", "date_creation"),
+        ("notifications", "date_creation"),
+        ("resultats_chatbots", "date_creation"),
+        ("actions_moderations", "date_creation"),
+        ("scraping_logs", "started_at"),
+        ("scraping_logs", "finished_at"),
+        ("scraping_logs", "created_at"),
+        ("sources_aides", "derniere_collecte"),
+    )
     with engine.begin() as connection:
-        for statement in statements:
+        for statement in add_column_statements:
             connection.execute(text(statement))
+        for table_name, column_name in utc_datetime_columns:
+            data_type = connection.execute(
+                text(
+                    """
+                    SELECT data_type
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = :table_name
+                      AND column_name = :column_name
+                    """
+                ),
+                {"table_name": table_name, "column_name": column_name},
+            ).scalar()
+            if data_type and data_type != "timestamp with time zone":
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ALTER COLUMN {column_name} "
+                        f"TYPE TIMESTAMPTZ USING {column_name} AT TIME ZONE 'UTC'"
+                    )
+                )

@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.database.database import Base
 
 class DocumentRequis(Base):

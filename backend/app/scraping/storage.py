@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from datetime import datetime
 
+from app.core.datetime_utils import utc_now
 from app.models.aides import Aides
 from app.models.categorie_aide import CategorieAide
 from app.models.source_aide import SourceAide
@@ -27,7 +27,7 @@ def get_or_create_source(db: Session, data: dict) -> SourceAide:
     if source is None:
         source = db.query(SourceAide).filter(SourceAide.nom == source_nom).first()
 
-    now = datetime.utcnow()
+    now = utc_now()
     if source is None:
         source = SourceAide(
             nom=source_nom,
@@ -77,7 +77,7 @@ def prepare_aide_data(db: Session, data: dict) -> dict | None:
     aide_data = {key: value for key, value in data.items() if key in allowed_fields}
     aide_data["source_id"] = source.source_id
     aide_data["categorie_id"] = category.categorie_id
-    aide_data["derniere_mise_a_jour"] = datetime.utcnow()
+    aide_data["derniere_mise_a_jour"] = utc_now()
 
     return aide_data
 

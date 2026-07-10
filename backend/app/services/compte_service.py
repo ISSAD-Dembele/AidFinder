@@ -5,10 +5,9 @@ Les routes admin consommeront ces fonctions (suspension, réactivation, avertiss
 sans dupliquer la logique métier.
 """
 
-from datetime import datetime, timezone
-
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now
 from app.core.statuts_compte import ACTIF, SUSPENDU_ADMIN
 from app.models.utilisateurs import Utilisateur
 
@@ -16,7 +15,7 @@ from app.models.utilisateurs import Utilisateur
 def suspendre_par_admin(db: Session, utilisateur: Utilisateur) -> Utilisateur:
     """Suspend un compte — réservé au Dashboard Administrateur."""
     utilisateur.statut_compte = SUSPENDU_ADMIN
-    utilisateur.date_desactivation = datetime.now(timezone.utc)
+    utilisateur.date_desactivation = utc_now()
     db.commit()
     db.refresh(utilisateur)
     return utilisateur

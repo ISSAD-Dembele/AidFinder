@@ -1,7 +1,10 @@
-from sqlalchemy import and_, case, desc, func, or_
+from datetime import date, datetime, timezone
+
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
+from app.core.datetime_utils import as_utc
 from app.models.aides import Aides
 from app.models.consultation_aide import ConsultationAide
 from app.models.discussion import Discussion
@@ -14,6 +17,7 @@ from app.models.utilisateurs import Utilisateur
 PROFILE_FIELDS = (
     "nom",
     "date_naissance",
+    "ville",
     "region",
     "niveau_etude",
     "statut_socio_pro",
@@ -34,6 +38,7 @@ def calculate_profile_progress(user: Utilisateur) -> int:
 def _serialize_aid(
     aide: Aides,
     score_matching: int | None = None,
+    raisons: list[str] | None = None,
     date_consultation=None,
 ) -> dict:
     categorie = aide.categorie.nom if aide.categorie else aide.type_aide
@@ -49,8 +54,10 @@ def _serialize_aid(
         "region_cible": aide.region_cible,
         "type_aide": aide.type_aide,
         "score_matching": score_matching,
-        "date_creation": aide.date_creation,
-        "date_consultation": date_consultation,
+        "compatibilite": score_matching,
+        "raisons": raisons or [],
+        "date_creation": as_utc(aide.date_creation),
+        "date_consultation": as_utc(date_consultation),
     }
 
 
@@ -133,8 +140,8 @@ def get_user_history(db: Session, user: Utilisateur) -> list[dict]:
                 .filter(Discussion.historique_id == history.historique_id)
                 .order_by(desc(Discussion.date_creation), desc(Discussion.discussion_id))
                 .limit(1).scalar(),
-            "date_creation": history.date_creation,
-            "date_derniere_activite": history.date_derniere_activite,
+            "date_creation": as_utc(history.date_creation),
+            "date_derniere_activite": as_utc(history.date_derniere_activite),
         }
         for history in histories
     ]
@@ -162,8 +169,8 @@ def get_recent_conversations(db: Session, user: Utilisateur, limit: int = 5) -> 
                 "historique_id": history.historique_id,
                 "titre_resume": history.titre_resume,
                 "dernier_message": last_message.contenu if last_message else None,
-                "date_creation": history.date_creation,
-                "date_derniere_activite": history.date_derniere_activite,
+                "date_creation": as_utc(history.date_creation),
+                "date_derniere_activite": as_utc(history.date_derniere_activite),
             }
         )
 
@@ -182,109 +189,108 @@ def get_recent_aids(db: Session, user: Utilisateur, limit: int = 5) -> list[dict
     return [_serialize_aid(aide, date_consultation=date_consultation) for aide, date_consultation in rows]
 
 
-def _profile_match_filters(user: Utilisateur):
-    filters = []
-    ville = getattr(user, "ville", None) or user.region
-    if ville:
-        filters.append(
-            or_(
-                Aides.region_cible.is_(None),
-                Aides.region_cible.ilike("%Maroc%"),
-                Aides.region_cible.ilike(f"%{ville}%"),
-            )
-        )
-    if user.niveau_etude:
-        filters.append(
-            or_(
-                Aides.niveau_etude_requis.is_(None),
-                Aides.niveau_etude_requis.ilike("%Tous%"),
-                Aides.niveau_etude_requis.ilike(f"%{user.niveau_etude}%"),
-            )
-        )
-    if user.statut_socio_pro:
-        filters.append(
-            or_(
-                Aides.statut_socio_pro_requis.is_(None),
-                Aides.statut_socio_pro_requis.ilike("%Tous%"),
-                Aides.statut_socio_pro_requis.ilike(f"%{user.statut_socio_pro}%"),
-            )
-        )
-    return filters
+def _normalize(value: str | None) -> str:
+    return (value or "").strip().casefold()
 
 
-def _recommendation_score(user: Utilisateur):
-    ville = getattr(user, "ville", None) or user.region
-    score_parts = []
-    if ville:
-        score_parts.append(
-            case(
-                (
-                    or_(
-                        Aides.region_cible.ilike(f"%{ville}%"),
-                        Aides.region_cible.ilike("%Maroc%"),
-                    ),
-                    40,
-                ),
-                (Aides.region_cible.is_(None), 20),
-                else_=0,
-            )
-        )
-    if user.statut_socio_pro:
-        score_parts.append(
-            case(
-                (Aides.statut_socio_pro_requis.ilike(f"%{user.statut_socio_pro}%"), 30),
-                (
-                    or_(
-                        Aides.statut_socio_pro_requis.is_(None),
-                        Aides.statut_socio_pro_requis.ilike("%Tous%"),
-                    ),
-                    15,
-                ),
-                else_=0,
-            )
-        )
-    if user.niveau_etude:
-        score_parts.append(
-            case(
-                (Aides.niveau_etude_requis.ilike(f"%{user.niveau_etude}%"), 30),
-                (
-                    or_(
-                        Aides.niveau_etude_requis.is_(None),
-                        Aides.niveau_etude_requis.ilike("%Tous%"),
-                    ),
-                    15,
-                ),
-                else_=0,
-            )
-        )
-    if not score_parts:
-        return case((Aides.aide_id.isnot(None), 0), else_=0)
-    return sum(score_parts)
+def _is_open_requirement(value: str | None) -> bool:
+    normalized = _normalize(value)
+    return not normalized or any(token in normalized for token in ("tous", "toutes", "maroc", "national"))
 
 
-def _recommendation_query(db: Session, user: Utilisateur):
-    score = _recommendation_score(user).label("score_matching")
-    filters = _profile_match_filters(user)
-    query = db.query(Aides, score)
-    if filters:
-        query = query.filter(and_(*filters))
-    if user.situation_handicap is not None:
-        query = query.filter(or_(Aides.handicap_requis.is_(False), Aides.handicap_requis == user.situation_handicap))
-    return query.order_by(desc(score), desc(Aides.date_creation), desc(Aides.aide_id))
+def _matches_requirement(requirement: str | None, *profile_values: str | None) -> bool:
+    if _is_open_requirement(requirement):
+        return True
+    normalized_requirement = _normalize(requirement)
+    return any(_normalize(value) and _normalize(value) in normalized_requirement for value in profile_values)
+
+
+def _calculate_age(date_naissance: date | None) -> int | None:
+    if date_naissance is None:
+        return None
+    today = date.today()
+    return today.year - date_naissance.year - ((today.month, today.day) < (date_naissance.month, date_naissance.day))
+
+
+def calculate_recommendation_score(user: Utilisateur, aide: Aides) -> tuple[int, list[str]]:
+    score = 0
+    raisons: list[str] = []
+    user_age = _calculate_age(user.date_naissance)
+    ville = getattr(user, "ville", None)
+
+    if _matches_requirement(aide.region_cible, ville, user.region):
+        score += 25
+        raisons.append("Région compatible" if not _is_open_requirement(aide.region_cible) else "Région non restrictive")
+    else:
+        raisons.append("Région non compatible")
+
+    if _matches_requirement(aide.niveau_etude_requis, user.niveau_etude):
+        score += 20
+        raisons.append("Niveau d'étude compatible" if not _is_open_requirement(aide.niveau_etude_requis) else "Niveau d'étude non restrictif")
+    else:
+        raisons.append("Niveau d'étude non compatible")
+
+    if _matches_requirement(aide.statut_socio_pro_requis, user.statut_socio_pro):
+        score += 20
+        raisons.append("Statut compatible" if not _is_open_requirement(aide.statut_socio_pro_requis) else "Statut non restrictif")
+    else:
+        raisons.append("Statut non compatible")
+
+    age_min = aide.age_min
+    age_max = aide.age_max
+    if age_min is None and age_max is None:
+        score += 20
+        raisons.append("Âge non limité")
+    elif user_age is None:
+        raisons.append("Âge non renseigné")
+    elif (age_min is None or user_age >= age_min) and (age_max is None or user_age <= age_max):
+        score += 20
+        raisons.append("Âge compatible")
+    else:
+        raisons.append("Âge non compatible")
+
+    if aide.handicap_requis is True:
+        if user.situation_handicap is True:
+            score += 15
+            raisons.append("Handicap compatible")
+        else:
+            raisons.append("Handicap requis")
+    else:
+        score += 15
+        raisons.append("Handicap non requis")
+
+    return min(100, max(0, score)), raisons
+
+
+def _recommendation_rows(db: Session, user: Utilisateur) -> list[tuple[Aides, int, list[str]]]:
+    aides = (
+        db.query(Aides)
+        .filter(Aides.est_active.is_(True))
+        .order_by(desc(Aides.date_creation), desc(Aides.aide_id))
+        .all()
+    )
+    rows = []
+    for aide in aides:
+        score, raisons = calculate_recommendation_score(user, aide)
+        rows.append((aide, score, raisons))
+    return sorted(
+        rows,
+        key=lambda row: (
+            row[1],
+            as_utc(row[0].date_creation) or datetime.min.replace(tzinfo=timezone.utc),
+            row[0].aide_id,
+        ),
+        reverse=True,
+    )
 
 
 def get_user_recommendations(db: Session, user: Utilisateur, limit: int = 10) -> list[dict]:
-    rows = _recommendation_query(db, user).limit(limit).all()
-    if not rows and _profile_match_filters(user):
-        rows = db.query(Aides, _recommendation_score(user).label("score_matching")).order_by(
-            desc(Aides.date_creation), desc(Aides.aide_id)
-        ).limit(limit).all()
-    return [_serialize_aid(aide, int(score_matching or 0)) for aide, score_matching in rows]
+    rows = _recommendation_rows(db, user)[:limit]
+    return [_serialize_aid(aide, score, raisons) for aide, score, raisons in rows]
 
 
 def count_user_recommendations(db: Session, user: Utilisateur, limit: int = 10) -> int:
-    subquery = _recommendation_query(db, user).limit(limit).subquery()
-    return db.query(func.count()).select_from(subquery).scalar() or 0
+    return len(_recommendation_rows(db, user)[:limit])
 
 
 def get_user_dashboard(db: Session, user: Utilisateur) -> dict:

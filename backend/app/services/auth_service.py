@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
-
 from fastapi import status, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from app.core.datetime_utils import utc_now
 from app.models.utilisateurs import Utilisateur
 from app.schemas.utilisateur import UserCreate, UserLogin
 from app.core.securite import hash_password, verify_password, create_access_token
@@ -39,7 +38,7 @@ def register_user(db: Session, user: UserCreate):
         mot_de_passe_hash=hashed_password,
         role="utilisateur",  # Default role
         statut_compte=ACTIF,
-        date_creation=datetime.now(timezone.utc)
+        date_creation=utc_now()
     )
     
     # Add the new user to the database
@@ -76,7 +75,7 @@ def login_user(db: Session, user: UserLogin):
         bd_user.statut_compte = ACTIF
         bd_user.date_desactivation = None
 
-    bd_user.date_derniere_connexion = datetime.now(timezone.utc)
+    bd_user.date_derniere_connexion = utc_now()
     db.commit()
     db.refresh(bd_user)
 
@@ -96,7 +95,7 @@ def deactivate_user(db: Session, current_user: Utilisateur):
 
     # Désactivation volontaire — distincte d'une suspension admin
     current_user.statut_compte = DESACTIVE_UTILISATEUR
-    current_user.date_desactivation = datetime.now(timezone.utc)
+    current_user.date_desactivation = utc_now()
         
     db.commit()
     db.refresh(current_user)

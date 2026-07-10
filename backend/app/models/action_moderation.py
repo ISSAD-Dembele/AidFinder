@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.core.datetime_utils import utc_now
 from app.database.database import Base
 
 class ActionModeration(Base):
@@ -12,7 +12,7 @@ class ActionModeration(Base):
     type_action = Column(String, nullable=False)  # "warning", "desactivate"
     motif = Column(Text, nullable=False)
     message_affiche = Column(String)
-    date_creation = Column(DateTime, default=datetime.utcnow)
+    date_creation = Column(DateTime(timezone=True), default=utc_now)
     
     #les relations avec les autres tables
     administrateur = relationship("Administrateur", back_populates="actions_moderation")

@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
-
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import as_utc, utc_now
 from app.core.statuts_compte import ACTIF, DESACTIVE_UTILISATEUR, SUSPENDU_ADMIN
 from app.models.aides import Aides
 from app.models.categorie_aide import CategorieAide
@@ -75,8 +74,8 @@ def _serialize_aide(aide: Aides) -> dict:
         "est_active": aide.est_active,
         "categorie": aide.categorie.nom if aide.categorie else None,
         "source": aide.source.nom if aide.source else None,
-        "date_creation": aide.date_creation,
-        "derniere_mise_a_jour": aide.derniere_mise_a_jour,
+        "date_creation": as_utc(aide.date_creation),
+        "derniere_mise_a_jour": as_utc(aide.derniere_mise_a_jour),
     }
 
 
@@ -114,7 +113,7 @@ def update_user(db: Session, user_id: int, data: AdminUserUpdate) -> Utilisateur
         if values.get("statut_compte") == ACTIF:
             user.date_desactivation = None
         elif values.get("statut_compte") in {DESACTIVE_UTILISATEUR, SUSPENDU_ADMIN}:
-            user.date_desactivation = datetime.now(timezone.utc)
+            user.date_desactivation = utc_now()
         db.commit()
         db.refresh(user)
         return user
@@ -140,7 +139,7 @@ def deactivate_user(db: Session, user_id: int) -> Utilisateur:
     user = _get_user_or_404(db, user_id)
     try:
         user.statut_compte = SUSPENDU_ADMIN
-        user.date_desactivation = datetime.now(timezone.utc)
+        user.date_desactivation = utc_now()
         db.commit()
         db.refresh(user)
         return user
@@ -168,7 +167,7 @@ def list_aides(db: Session) -> list[dict]:
 def create_aide(db: Session, data: AdminAideCreate) -> dict:
     _ensure_relations_exist(db, data.source_id, data.categorie_id)
     try:
-        aide = Aides(**data.model_dump(), derniere_mise_a_jour=datetime.utcnow())
+        aide = Aides(**data.model_dump(), derniere_mise_a_jour=utc_now())
         db.add(aide)
         db.commit()
         db.refresh(aide)
@@ -185,7 +184,7 @@ def update_aide(db: Session, aide_id: int, data: AdminAideUpdate) -> dict:
     try:
         for key, value in values.items():
             setattr(aide, key, value)
-        aide.derniere_mise_a_jour = datetime.utcnow()
+        aide.derniere_mise_a_jour = utc_now()
         db.commit()
         db.refresh(aide)
         return _serialize_aide(aide)
@@ -209,7 +208,7 @@ def set_aide_active(db: Session, aide_id: int, active: bool) -> dict:
     aide = _get_aide_or_404(db, aide_id)
     try:
         aide.est_active = active
-        aide.derniere_mise_a_jour = datetime.utcnow()
+        aide.derniere_mise_a_jour = utc_now()
         db.commit()
         db.refresh(aide)
         return _serialize_aide(aide)
@@ -266,7 +265,7 @@ def rerun_source_scraping(db: Session, source_id: int) -> dict:
     source = _get_source_or_404(db, source_id)
     try:
         records = run_all_scrapers()
-        source.derniere_collecte = datetime.utcnow()
+        source.derniere_collecte = utc_now()
         db.commit()
         db.refresh(source)
         return {
@@ -321,6 +320,16 @@ def get_statistics(db: Session) -> dict:
             .all()
         )
     ]
+    evolution_exports_pdf = [
+        {"date": created_date, "total": total or 0}
+        for created_date, total in (
+            db.query(func.date(ExportPDF.date_creation), func.count(ExportPDF.export_id))
+            .filter(ExportPDF.date_creation.isnot(None))
+            .group_by(func.date(ExportPDF.date_creation))
+            .order_by(func.date(ExportPDF.date_creation))
+            .all()
+        )
+    ]
     sources_les_plus_utilisees = [
         {"label": label or "Source inconnue", "total": total or 0}
         for label, total in (
@@ -338,6 +347,7 @@ def get_statistics(db: Session) -> dict:
         "aides_par_region": aides_par_region,
         "evolution_utilisateurs": evolution_utilisateurs,
         "evolution_conversations": evolution_conversations,
+        "evolution_exports_pdf": evolution_exports_pdf,
         "sources_les_plus_utilisees": sources_les_plus_utilisees,
     }
 
@@ -367,7 +377,7 @@ def get_logs(db: Session) -> dict:
                 "nom": user.nom,
                 "email": user.email,
                 "role": user.role,
-                "date_derniere_connexion": user.date_derniere_connexion,
+                "date_derniere_connexion": as_utc(user.date_derniere_connexion),
             }
             for user in users
         ],

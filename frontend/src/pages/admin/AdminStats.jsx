@@ -171,6 +171,12 @@ export default function AdminStats() {
           items={stats.evolution_conversations}
           color="#10b981"
         />
+        <LineChartCard
+          title="Évolution des exports PDF"
+          subtitle="Exports générés sur les 30 derniers jours"
+          items={stats.evolution_exports_pdf}
+          color="#f59e0b"
+        />
       </div>
 
       {/* Graphiques en barres */}
