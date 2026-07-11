@@ -59,6 +59,11 @@ export const dashboardService = {
     const { data } = await api.post(`/api/home/aids/${aideId}/consultation`)
     return data
   },
+
+  recordChatConsultation: async (historiqueId, aideId) => {
+    const { data } = await api.post(`/dashboard/chat/${historiqueId}/consultation/${aideId}`)
+    return data
+  },
 }
 
 export default dashboardService

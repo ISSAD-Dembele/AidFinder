@@ -4,24 +4,25 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
   Bot,
-  User,
   AlertTriangle,
   RefreshCw,
   Plus,
-  MessageSquare,
   Sparkles,
 } from 'lucide-react'
 import dashboardService from '@/src/services/dashboardService'
 import ChatSuggestions from '@/src/components/dashboard/ChatSuggestions'
 import ChatInput from '@/src/components/dashboard/ChatInput'
 import AidCard from '@/src/components/dashboard/AidCard'
-import { ChatMessageSkeleton, ChatTypingIndicator, AidCardSkeleton } from '@/src/components/dashboard/SkeletonLoader'
+import ConversationBubble from '@/src/components/dashboard/ConversationBubble'
+import TypingIndicator from '@/src/components/dashboard/TypingIndicator'
+import SuggestionButtons from '@/src/components/dashboard/SuggestionButtons'
+import AidDetailModal from '@/src/components/dashboard/AidDetailModal'
+import { ChatMessageSkeleton } from '@/src/components/dashboard/SkeletonLoader'
 import { Button } from '@/components/ui/button'
-import { formatLocalDateTime } from '@/src/utils/date'
 
 /* ─────────────────────────────────────────
    Variants Framer Motion
-───────────────────────────────────────── */
+   ───────────────────────────────────────── */
 const messageVariants = {
   hidden: { opacity: 0, y: 12, scale: 0.97 },
   visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.28, ease: 'easeOut' } },
@@ -34,68 +35,8 @@ const sectionVariants = {
 }
 
 /* ─────────────────────────────────────────
-   Bulle de message individuelle
-───────────────────────────────────────── */
-function ChatBubble({ msg }) {
-  const isBot = msg.sender === 'assistant'
-
-  return (
-    <motion.div
-      layout
-      variants={messageVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      className={`flex items-end gap-2.5 ${isBot ? 'justify-start' : 'justify-end'}`}
-    >
-      {/* Avatar Bot */}
-      {isBot && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#2963E8]/10 text-[#2963E8] shadow-xs mb-5">
-          <Bot className="size-4" />
-        </div>
-      )}
-
-      <div className={`flex flex-col gap-1 max-w-[82%] ${isBot ? 'items-start' : 'items-end'}`}>
-        {/* Bulle texte */}
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
-            isBot
-              ? msg.isError
-                ? 'bg-destructive/10 text-destructive border border-destructive/20 rounded-tl-none'
-                : 'bg-muted/50 text-foreground border border-border/40 rounded-tl-none'
-              : 'bg-[#2963E8] text-white rounded-br-none'
-          }`}
-        >
-          {/* Pré-formater le texte pour les sauts de ligne */}
-          {msg.text.split('\n').map((line, i) => (
-            <span key={i}>
-              {line}
-              {i < msg.text.split('\n').length - 1 && <br />}
-            </span>
-          ))}
-        </div>
-
-        {/* Timestamp */}
-        {msg.timestamp && (
-          <span className="text-[10px] text-muted-foreground/60 px-1">
-            {formatLocalDateTime(msg.timestamp)}
-          </span>
-        )}
-      </div>
-
-      {/* Avatar Utilisateur */}
-      {!isBot && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground shadow-xs mb-5">
-          <User className="size-4" />
-        </div>
-      )}
-    </motion.div>
-  )
-}
-
-/* ─────────────────────────────────────────
    Empty State (aucune conversation)
-───────────────────────────────────────── */
+   ───────────────────────────────────────── */
 function EmptyChatState({ onSelect }) {
   return (
     <motion.div
@@ -104,8 +45,7 @@ function EmptyChatState({ onSelect }) {
       animate="visible"
       className="flex flex-col items-center justify-center py-8 text-center"
     >
-      {/* Icône */}
-      <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-[#2963E8]/10 text-[#2963E8] shadow-xs">
+      <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-[#2963E8]/10 text-[#2963E8] shadow-xs animate-pulse">
         <Sparkles className="size-7" />
       </div>
 
@@ -125,9 +65,9 @@ function EmptyChatState({ onSelect }) {
 
 /* ─────────────────────────────────────────
    Section cartes d'aides recommandées
-───────────────────────────────────────── */
-function AidsRecommendedSection({ aids, loading }) {
-  if (!loading && (!aids || aids.length === 0)) return null
+   ───────────────────────────────────────── */
+function AidsRecommendedSection({ aids, historiqueId, onShowDetail }) {
+  if (!aids || aids.length === 0) return null
 
   return (
     <motion.div
@@ -143,26 +83,24 @@ function AidsRecommendedSection({ aids, loading }) {
         <h2 className="text-sm font-bold text-foreground">Aides recommandées pour vous</h2>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <AidCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {aids.map((aid, i) => (
-            <AidCard key={aid.aide_id} aid={aid} index={i} />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {aids.map((aid, i) => (
+          <AidCard
+            key={aid.aide_id}
+            aid={aid}
+            index={i}
+            historiqueId={historiqueId}
+            onShowDetail={onShowDetail}
+          />
+        ))}
+      </div>
     </motion.div>
   )
 }
 
 /* ─────────────────────────────────────────
    Page principale
-───────────────────────────────────────── */
+   ───────────────────────────────────────── */
 export default function DiscussionPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -173,8 +111,11 @@ export default function DiscussionPage() {
   const [sending, setSending] = useState(false)
   const [chatInputVal, setChatInputVal] = useState('')
 
+  // États dynamiques du chatbot
+  const [questionActuelle, setQuestionActuelle] = useState(null)
+  const [suggestions, setSuggestions] = useState([])
   const [recommendations, setRecommendations] = useState([])
-  const [recsLoading, setRecsLoading] = useState(false)
+  const [selectedAid, setSelectedAid] = useState(null)
 
   const messagesEndRef = useRef(null)
 
@@ -185,25 +126,15 @@ export default function DiscussionPage() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, sending, scrollToBottom])
-
-  /* ── Charger les recommandations ── */
-  const loadRecommendations = useCallback(async () => {
-    setRecsLoading(true)
-    try {
-      const data = await dashboardService.getRecommendations()
-      setRecommendations(Array.isArray(data) ? data : [])
-    } catch {
-      setRecommendations([])
-    } finally {
-      setRecsLoading(false)
-    }
-  }, [])
+  }, [messages, sending, suggestions, scrollToBottom])
 
   /* ── Charger la conversation ── */
   const loadConversation = useCallback(async () => {
     if (!id) {
       setMessages([])
+      setQuestionActuelle(null)
+      setSuggestions([])
+      setRecommendations([])
       setLoading(false)
       setError(null)
       return
@@ -220,6 +151,9 @@ export default function DiscussionPage() {
         timestamp: m.date_creation || null,
       }))
       setMessages(formatted)
+      setQuestionActuelle(data.question_actuelle)
+      setSuggestions(data.suggestions || [])
+      setRecommendations(data.aides_recommandees || [])
     } catch (err) {
       setError(err)
     } finally {
@@ -230,11 +164,6 @@ export default function DiscussionPage() {
   useEffect(() => {
     loadConversation()
   }, [loadConversation])
-
-  /* ── Charger les recommandations au montage ── */
-  useEffect(() => {
-    loadRecommendations()
-  }, [loadRecommendations])
 
   /* ── Envoyer un message ── */
   const handleSend = async (text) => {
@@ -251,6 +180,10 @@ export default function DiscussionPage() {
     setMessages((prev) => [...prev, tempUserMsg])
     setSending(true)
 
+    // Masquer temporairement les anciennes suggestions
+    setQuestionActuelle(null)
+    setSuggestions([])
+
     try {
       const res = await dashboardService.sendChatMessage(text, id)
 
@@ -261,20 +194,22 @@ export default function DiscussionPage() {
         timestamp: res.bot_message.date_creation || new Date().toISOString(),
       }
       setMessages((prev) => [...prev, botMsg])
+      
+      setQuestionActuelle(res.question_actuelle)
+      setSuggestions(res.suggestions || [])
+      setRecommendations(res.aides_recommandees || [])
 
-      // Redirect to the created conversation ID (nouveau chat → chat avec ID)
+      // Redirection vers l'ID si c'était une nouvelle conversation
       if (!id && res.historique_id) {
         navigate(`/dashboard/discussion/${res.historique_id}`, { replace: true })
       }
-
-      // Recharger les recommandations après chaque échange (le profil IA s'enrichit)
-      loadRecommendations()
     } catch {
       const errorMsg = {
         id: Date.now() + 2,
         sender: 'assistant',
-        text: "Une erreur est survenue lors de l'envoi de votre message. Veuillez réessayer.",
+        text: "Impossible de contacter AidFinder IA.",
         isError: true,
+        failedText: text,
         timestamp: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, errorMsg])
@@ -283,8 +218,14 @@ export default function DiscussionPage() {
     }
   }
 
+  const handleRetry = (failedText) => {
+    // Retirer le message d'erreur
+    setMessages((prev) => prev.filter((m) => !m.isError))
+    handleSend(failedText)
+  }
+
   const handleSuggestionSelect = (text) => {
-    setChatInputVal(text)
+    handleSend(text)
   }
 
   const handleBack = () => navigate(-1)
@@ -292,11 +233,10 @@ export default function DiscussionPage() {
 
   /* ══════════════════════════════════════════
      États de chargement initial
-  ══════════════════════════════════════════ */
+     ══════════════════════════════════════════ */
   if (loading) {
     return (
       <div className="flex flex-1 flex-col px-4 py-6 sm:px-8">
-        {/* Header skeleton */}
         <div className="mb-6 flex items-center justify-between border-b border-border/60 pb-4 shrink-0">
           <div className="flex items-center gap-3">
             <Button
@@ -321,17 +261,17 @@ export default function DiscussionPage() {
   }
 
   /* ══════════════════════════════════════════
-     État d'erreur
-  ══════════════════════════════════════════ */
+     État d'erreur initial (Si le chargement de l'historique plante)
+     ══════════════════════════════════════════ */
   if (error) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center animate-fade-in">
         <div className="rounded-full bg-destructive/10 p-4 text-destructive mb-4">
           <AlertTriangle className="size-7" />
         </div>
         <h3 className="text-base font-bold text-foreground">Erreur de chargement</h3>
         <p className="mt-2 text-sm text-muted-foreground max-w-sm leading-relaxed">
-          Impossible d'ouvrir la discussion. Veuillez réessayer ou retourner au tableau de bord.
+          Impossible de contacter AidFinder IA.
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           <Button
@@ -352,11 +292,10 @@ export default function DiscussionPage() {
 
   /* ══════════════════════════════════════════
      Interface principale
-  ══════════════════════════════════════════ */
+     ══════════════════════════════════════════ */
   return (
     <div className="flex flex-1 flex-col px-4 py-6 sm:px-8">
-
-      {/* ── En-tête ── */}
+      {/* En-tête */}
       <div className="mb-5 flex items-center justify-between border-b border-border/60 pb-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <Button
@@ -404,20 +343,43 @@ export default function DiscussionPage() {
         </div>
       </div>
 
-      {/* ── Zone de messages ── */}
+      {/* Zone de messages */}
       <div className="flex-1 overflow-y-auto pr-1 max-w-3xl mx-auto w-full">
         {messages.length === 0 ? (
-          /* Empty state + suggestions */
           <EmptyChatState onSelect={handleSuggestionSelect} />
         ) : (
-          <div className="space-y-3 py-2">
+          <div className="space-y-4 py-2">
             <AnimatePresence initial={false}>
               {messages.map((msg) => (
-                <ChatBubble key={msg.id} msg={msg} />
+                <div key={msg.id} className="space-y-2">
+                  <ConversationBubble msg={msg} />
+                  
+                  {/* Si le message a échoué, afficher la carte d'erreur élégante */}
+                  {msg.isError && (
+                    <motion.div
+                      variants={messageVariants}
+                      initial="hidden"
+                      animate="visible"
+                      className="ml-10 flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 max-w-sm shadow-xs"
+                    >
+                      <div className="flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="size-4 shrink-0" />
+                        <span className="text-xs font-bold">Impossible de contacter AidFinder IA</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleRetry(msg.failedText)}
+                        className="w-fit bg-[#2963E8] hover:bg-[#1e52c7] text-white text-xs font-semibold px-4 py-1.5 rounded-lg"
+                      >
+                        Réessayer
+                      </Button>
+                    </motion.div>
+                  )}
+                </div>
               ))}
             </AnimatePresence>
 
-            {/* Indicateur "IA en train d'écrire..." */}
+            {/* Indicateur d'écriture */}
             <AnimatePresence>
               {sending && (
                 <motion.div
@@ -427,24 +389,38 @@ export default function DiscussionPage() {
                   animate="visible"
                   exit="exit"
                 >
-                  <ChatTypingIndicator />
+                  <TypingIndicator />
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Suggestions de questions dynamiques */}
+            {!sending && suggestions && suggestions.length > 0 && (
+              <div className="ml-10">
+                <SuggestionButtons
+                  suggestions={suggestions}
+                  onSelect={handleSuggestionSelect}
+                />
+              </div>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
         )}
 
-        {/* ── Cartes d'aides recommandées (visibles si conversation active) ── */}
-        {messages.length > 0 && (
+        {/* Cartes d'aides recommandées */}
+        {messages.length > 0 && recommendations && recommendations.length > 0 && (
           <div className="max-w-3xl mx-auto">
-            <AidsRecommendedSection aids={recommendations} loading={recsLoading} />
+            <AidsRecommendedSection
+              aids={recommendations}
+              historiqueId={id}
+              onShowDetail={(aid) => setSelectedAid(aid)}
+            />
           </div>
         )}
       </div>
 
-      {/* ── Zone de saisie ── */}
+      {/* Zone de saisie */}
       <div className="sticky bottom-0 mt-4 bg-background pt-3 pb-4 shrink-0">
         <ChatInput
           value={chatInputVal}
@@ -453,6 +429,32 @@ export default function DiscussionPage() {
           disabled={sending}
         />
       </div>
+
+      {/* Modal de détail d'aide */}
+      <AnimatePresence>
+        {selectedAid && (
+          <AidDetailModal
+            aid={selectedAid}
+            onClose={() => setSelectedAid(null)}
+            onConsult={async () => {
+              try {
+                if (id) {
+                  await dashboardService.recordChatConsultation(id, selectedAid.aide_id)
+                } else {
+                  await dashboardService.recordAidConsultation(selectedAid.aide_id)
+                }
+              } catch (err) {
+                console.error(err)
+              } finally {
+                if (selectedAid.url_officielle) {
+                  window.open(selectedAid.url_officielle, '_blank', 'noopener,noreferrer')
+                }
+                setSelectedAid(null)
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

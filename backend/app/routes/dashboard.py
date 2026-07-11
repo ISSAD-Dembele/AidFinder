@@ -62,10 +62,44 @@ def read_history_detail(
         Discussion.historique_id == history_id
     ).order_by(Discussion.date_creation).all()
     
+    # Charger l'état complet du chatbot pour restaurer la conversation au rechargement
+    from app.services.conversation_engine import ConversationMeta
+    from app.services.chat_service import _build_user_profile, chat_service
+    from app.services.dashboard_service import calculate_recommendation_score, _serialize_aid
+    from app.models.resultat_chat import ResultatChatbot
+    
+    meta = ConversationMeta.from_json(history_item.conversation_meta)
+    db_profile = _build_user_profile(current_user)
+    merged_profile = dict(db_profile)
+    merged_profile.update(meta.collected_fields)
+    
+    missing_fields = chat_service.brain.profile_collector.missing_fields(merged_profile)
+    field_to_ask = chat_service.brain.profile_collector.next_missing_field(merged_profile)
+    
+    question = None
+    suggestions = []
+    if meta.state == "COLLECTING_INFO" and field_to_ask:
+        question = chat_service.brain.profile_collector.get_question(field_to_ask)
+        suggestions = chat_service.brain.profile_collector.get_suggestions(field_to_ask)
+        
+    resultats = db.query(ResultatChatbot).filter(
+        ResultatChatbot.historique_id == history_id
+    ).all()
+    
+    aides_recommandees = []
+    for r in resultats:
+        score, raisons = calculate_recommendation_score(current_user, r.aide)
+        aides_recommandees.append(_serialize_aid(r.aide, score_matching=score, raisons=raisons))
+    
     return {
         "historique_id": history_item.historique_id,
         "titre_resume": history_item.titre_resume,
         "date_creation": as_utc(history_item.date_creation),
+        "conversation_state": meta.state.value if meta.state else "GREETING",
+        "champs_manquants": missing_fields,
+        "question_actuelle": question,
+        "suggestions": suggestions,
+        "aides_recommandees": aides_recommandees,
         "messages": [
             {
                 "discussion_id": d.discussion_id,
