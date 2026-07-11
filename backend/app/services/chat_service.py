@@ -126,17 +126,10 @@ def _compute_dynamic_suggestions(
     """
     Compute dynamic suggestions based on:
     - conversation state
-    - profile completeness
     - existing recommendations
     - user intent
     """
     suggestions: list[str] = []
-
-    # If we need to ask a profile field, suggest answers
-    if decision.field_to_ask:
-        from app.services.conversation_brain import ProfileCollector
-        collector = ProfileCollector()
-        return collector.get_suggestions(decision.field_to_ask)
 
     # If recommendations exist, let user interact with them
     if recommendations:
@@ -155,12 +148,6 @@ def _compute_dynamic_suggestions(
             "J'ai besoin d'un logement",
             "Aide pour la santé",
         ]
-    elif state.value == "COLLECTING_INFO":
-        if not decision.field_to_ask:
-            suggestions = [
-                "Je cherche un emploi",
-                "Je veux faire des études",
-            ]
     elif state.value == "DISCUSSING":
         suggestions = [
             "Je veux voir plus d'aides",

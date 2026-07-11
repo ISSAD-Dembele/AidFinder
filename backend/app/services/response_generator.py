@@ -61,10 +61,10 @@ class PromptBuilder:
 
         parts = [self.SYSTEM_PROMPT]
 
-        # User profile
-        parts.append(f"Profil utilisateur : {profile_str}\n")
+        # User profile (for context only — LLM decides what to ask)
+        parts.append(f"Profil utilisateur (connu jusqu'à présent) : {profile_str}\n")
 
-        # Conversation state
+        # Conversation state (informational only)
         parts.append(f"État conversationnel : {decision.new_state.value}\n")
         parts.append(f"Intention détectée : {decision.intent.value}\n")
 
@@ -106,16 +106,15 @@ class PromptBuilder:
                 "Tu ne peux parler que des aides listées ci-dessus.\n"
             )
 
-        # Missing fields / question to ask
-        if decision.field_to_ask:
-            parts.append(
-                f"Tu dois demander à l'utilisateur : "
-                f"'{decision.field_to_ask}' (formule une question naturelle)\n"
-            )
-
         parts.append(
             "Réponds maintenant au message de l'utilisateur de manière naturelle, "
-            "chaleureuse et concise."
+            "chaleureuse et concise.\n\n"
+            "Tu es libre de répondre comme un vrai conseiller. "
+            "Ne pose des questions sur le profil que si c'est naturel dans la conversation. "
+            "Si l'utilisateur te salue, salue-le en retour. "
+            "Si l'utilisateur te demande qui tu es, présente-toi. "
+            "Si l'utilisateur commence à parler de sa situation, "
+            "écoute et pose des questions pertinentes une par une."
         )
 
         return "\n".join(parts)

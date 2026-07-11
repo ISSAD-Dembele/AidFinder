@@ -86,9 +86,8 @@ class IntentDetector:
     def detect(self, message: str, meta: ConversationMeta) -> IntentCategory:
         stripped = message.strip()
 
-        if meta.state == ConversationState.COLLECTING_INFO and meta.pending_questions:
-            return IntentCategory.PROVIDE_INFO
-
+        # The LLM decides how to interpret the message — not the intent detector.
+        # We only detect explicit intents for context tracking.
         for intent, pattern in self.PATTERNS.items():
             if pattern.search(stripped):
                 return intent
@@ -271,29 +270,21 @@ class ConversationBrain:
         new_state = self.state_machine.next_state(
             conversation_meta.state, intent, profile_complete
         )
-        field_to_ask = (
-            self.profile_collector.next_missing_field(merged)
-            if not profile_complete
-            else None
-        )
         should_recommend = self._should_recommend(
             intent, new_state, profile_complete, conversation_meta
-        )
-        clarification_needed = (
-            intent == IntentCategory.UNKNOWN
-            and conversation_meta.state
-            in (ConversationState.RECOMMENDING, ConversationState.DISCUSSING)
         )
 
         return ConversationDecision(
             intent=intent,
             new_state=new_state,
             should_recommend=should_recommend,
-            should_ask_question=field_to_ask is not None,
-            field_to_ask=field_to_ask,
+            # The LLM decides whether to ask questions — not the state machine
+            should_ask_question=False,
+            field_to_ask=None,
             extracted_info=extracted,
             merged_profile=merged,
-            clarification_needed=clarification_needed,
+            # LLM also decides when clarification is needed
+            clarification_needed=False,
         )
 
     def _should_recommend(

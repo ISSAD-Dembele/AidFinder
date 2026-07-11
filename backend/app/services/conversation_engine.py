@@ -97,41 +97,38 @@ class StateMachine:
         intent: IntentCategory,
         profile_complete: bool,
     ) -> ConversationState:
+        """
+        The state machine ONLY tracks conversation context.
+        It does NOT decide what the bot should say.
+        Transitions are purely informational for the LLM.
+        """
         if current == ConversationState.GREETING:
-            if intent in self.GREETING_INTENTS and profile_complete:
-                return ConversationState.DISCUSSING
+            # Greetings and social chat → stay in GREETING or move to DISCUSSING
             if intent in self.GREETING_INTENTS:
-                return ConversationState.COLLECTING_INFO
-            if intent in self.REQUEST_INTENTS and profile_complete:
-                return ConversationState.RECOMMENDING
+                return ConversationState.GREETING
+            # User starts asking for help → move to DISCUSSING (not COLLECTING_INFO directly)
             if intent in self.REQUEST_INTENTS:
-                return ConversationState.COLLECTING_INFO
-            return ConversationState.COLLECTING_INFO if not profile_complete else ConversationState.DISCUSSING
+                return ConversationState.DISCUSSING
+            # Unknown → let LLM handle it naturally
+            return ConversationState.GREETING
 
         if current == ConversationState.COLLECTING_INFO:
             if profile_complete:
-                if intent in self.REQUEST_INTENTS:
-                    return ConversationState.RECOMMENDING
                 return ConversationState.DISCUSSING
+            # Stay in COLLECTING_INFO only if we're already there
             return ConversationState.COLLECTING_INFO
 
         if current == ConversationState.RECOMMENDING:
-            if intent == IntentCategory.ASK_DETAILS:
-                return ConversationState.DISCUSSING
             if intent in self.REQUEST_INTENTS:
                 return ConversationState.RECOMMENDING
-            if intent == IntentCategory.UNKNOWN:
-                return ConversationState.CLARIFYING
-            return ConversationState.RECOMMENDING
+            return ConversationState.DISCUSSING
 
         if current == ConversationState.DISCUSSING:
             if intent in self.REQUEST_INTENTS:
                 return ConversationState.RECOMMENDING
-            if intent == IntentCategory.UNKNOWN:
-                return ConversationState.CLARIFYING
             return ConversationState.DISCUSSING
 
         if current == ConversationState.CLARIFYING:
-            return ConversationState.RECOMMENDING if profile_complete else ConversationState.COLLECTING_INFO
+            return ConversationState.DISCUSSING
 
         return current

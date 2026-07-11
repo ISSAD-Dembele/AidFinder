@@ -127,7 +127,8 @@ class ChatServiceTestCase(unittest.TestCase):
             self.user,
             "Bonjour",
         )
-        self.assertIn(response["conversation_state"], ["DISCUSSING", "COLLECTING_INFO"])
+        # The state machine stays in GREETING (informational only — LLM decides flow)
+        self.assertEqual(response["conversation_state"], "GREETING")
         self.assertFalse(response["aides_recommandees"])
         bot_text = response["bot_message"]["contenu"].lower()
         self.assertIn("bonjour", bot_text)
@@ -159,7 +160,9 @@ class ChatServiceTestCase(unittest.TestCase):
             self.user,
             "Je cherche un emploi",
         )
-        self.assertIn(response["conversation_state"], ["RECOMMENDING", "COLLECTING_INFO"])
+        # The state machine tracks context — RECOMMENDING is set when should_recommend is True
+        # and the state machine transitions from GREETING to DISCUSSING for REQUEST_INTENTS
+        self.assertIn(response["conversation_state"], ["DISCUSSING", "RECOMMENDING"])
         if response["aides_recommandees"]:
             aid = response["aides_recommandees"][0]
             self.assertIn("score_matching", aid)
@@ -184,7 +187,8 @@ class ChatServiceTestCase(unittest.TestCase):
             incomplete_user,
             "Je cherche des études",
         )
-        self.assertEqual(response["conversation_state"], "COLLECTING_INFO")
+        # The state machine tracks context — REQUEST_INTENTS from GREETING go to DISCUSSING
+        self.assertIn(response["conversation_state"], ["DISCUSSING", "COLLECTING_INFO"])
         self.assertTrue(response["champs_manquants"])
         # The LLM generates the response rather than the hardcoded question
         # Check that suggestions are provided for field collection
@@ -237,7 +241,8 @@ class ChatServiceTestCase(unittest.TestCase):
         ).first()
         self.assertIsNotNone(history.conversation_meta)
         meta = ConversationMeta.from_json(history.conversation_meta)
-        self.assertIn(meta.state, [ConversationState.COLLECTING_INFO, ConversationState.DISCUSSING])
+        # GREETING is the expected state for a greeting (informational tracking only)
+        self.assertIn(meta.state, [ConversationState.GREETING, ConversationState.DISCUSSING])
 
     def test_two_turn_conversation_keeps_memory(self):
         """Conversation en deux tours avec mémoire."""
