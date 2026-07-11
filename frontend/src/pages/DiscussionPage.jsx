@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import dashboardService from '@/src/services/dashboardService'
+import useStreamingChat from '@/src/hooks/useStreamingChat'
 import ChatSuggestions from '@/src/components/dashboard/ChatSuggestions'
 import ChatInput from '@/src/components/dashboard/ChatInput'
 import AidCard from '@/src/components/dashboard/AidCard'
@@ -99,6 +100,11 @@ function AidsRecommendedSection({ aids, historiqueId, onShowDetail }) {
 }
 
 /* ─────────────────────────────────────────
+   ID unique pour la bulle streaming
+   ───────────────────────────────────────── */
+const STREAMING_BUBBLE_ID = '__streaming__'
+
+/* ─────────────────────────────────────────
    Page principale
    ───────────────────────────────────────── */
 export default function DiscussionPage() {
@@ -108,7 +114,6 @@ export default function DiscussionPage() {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [sending, setSending] = useState(false)
   const [chatInputVal, setChatInputVal] = useState('')
 
   // États dynamiques du chatbot
@@ -117,6 +122,18 @@ export default function DiscussionPage() {
   const [recommendations, setRecommendations] = useState([])
   const [selectedAid, setSelectedAid] = useState(null)
 
+  // ── Hook streaming SSE ──
+  const {
+    streamingText,
+    isThinking,
+    isStreaming,
+    startStream,
+    cancelStream,
+  } = useStreamingChat()
+
+  // Dérivé : "en cours d'envoi" = thinking OU streaming
+  const sending = isThinking || isStreaming
+
   const messagesEndRef = useRef(null)
 
   /* ── Auto-scroll ── */
@@ -124,9 +141,44 @@ export default function DiscussionPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Scroll quand les messages changent, quand on attend, ou quand les suggestions arrivent
   useEffect(() => {
     scrollToBottom()
-  }, [messages, sending, suggestions, scrollToBottom])
+  }, [messages, isThinking, suggestions, scrollToBottom])
+
+  // Scroll continu pendant l'écriture progressive
+  useEffect(() => {
+    if (isStreaming) {
+      scrollToBottom()
+    }
+  }, [streamingText, isStreaming, scrollToBottom])
+
+  /* ── Synchroniser la bulle streaming dans messages ── */
+  useEffect(() => {
+    if (isStreaming && streamingText) {
+      setMessages((prev) => {
+        const hasStreamingBubble = prev.some((m) => m.id === STREAMING_BUBBLE_ID)
+        if (hasStreamingBubble) {
+          // Mise à jour additive — pas de reconstruction DOM
+          return prev.map((m) =>
+            m.id === STREAMING_BUBBLE_ID ? { ...m, text: streamingText } : m
+          )
+        } else {
+          // Première apparition de la bulle IA
+          return [
+            ...prev,
+            {
+              id: STREAMING_BUBBLE_ID,
+              sender: 'assistant',
+              text: streamingText,
+              timestamp: null,
+              isStreaming: true,
+            },
+          ]
+        }
+      })
+    }
+  }, [streamingText, isStreaming])
 
   /* ── Charger la conversation ── */
   const loadConversation = useCallback(async () => {
@@ -165,12 +217,20 @@ export default function DiscussionPage() {
     loadConversation()
   }, [loadConversation])
 
-  /* ── Envoyer un message ── */
-  const handleSend = async (text) => {
+  // Nettoyage : annuler le stream si le composant est démonté
+  useEffect(() => {
+    return () => {
+      cancelStream()
+    }
+  }, [cancelStream])
+
+  /* ── Envoyer un message (streaming SSE) ── */
+  const handleSend = (text) => {
     if (!text.trim() || sending) return
 
     const now = new Date().toISOString()
 
+    // 1. Afficher immédiatement la bulle utilisateur
     const tempUserMsg = {
       id: Date.now(),
       sender: 'user',
@@ -178,44 +238,58 @@ export default function DiscussionPage() {
       timestamp: now,
     }
     setMessages((prev) => [...prev, tempUserMsg])
-    setSending(true)
 
-    // Masquer temporairement les anciennes suggestions
+    // 2. Masquer les anciennes suggestions
     setQuestionActuelle(null)
     setSuggestions([])
 
-    try {
-      const res = await dashboardService.sendChatMessage(text, id)
+    // 3. Démarrer le stream SSE
+    startStream(text, id || null, {
+      onDone: (metadata) => {
+        const finalHistoriqueId = metadata.historique_id
 
-      const botMsg = {
-        id: Date.now() + 1,
-        sender: 'assistant',
-        text: res.bot_message.contenu,
-        timestamp: res.bot_message.date_creation || new Date().toISOString(),
-      }
-      setMessages((prev) => [...prev, botMsg])
-      
-      setQuestionActuelle(res.question_actuelle)
-      setSuggestions(res.suggestions || [])
-      setRecommendations(res.aides_recommandees || [])
+        // Finaliser la bulle streaming → message permanent
+        const botMsg = {
+          id: metadata.bot_message?.discussion_id ?? Date.now() + 1,
+          sender: 'assistant',
+          text: metadata.bot_message?.contenu ?? '',
+          timestamp: metadata.bot_message?.date_creation ?? new Date().toISOString(),
+          isStreaming: false,
+        }
 
-      // Redirection vers l'ID si c'était une nouvelle conversation
-      if (!id && res.historique_id) {
-        navigate(`/dashboard/discussion/${res.historique_id}`, { replace: true })
-      }
-    } catch {
-      const errorMsg = {
-        id: Date.now() + 2,
-        sender: 'assistant',
-        text: "Impossible de contacter AidFinder IA.",
-        isError: true,
-        failedText: text,
-        timestamp: new Date().toISOString(),
-      }
-      setMessages((prev) => [...prev, errorMsg])
-    } finally {
-      setSending(false)
-    }
+        setMessages((prev) =>
+          prev
+            .filter((m) => m.id !== STREAMING_BUBBLE_ID)
+            .concat(botMsg)
+        )
+
+        // Mettre à jour suggestions + recommandations depuis le backend
+        setQuestionActuelle(metadata.question_actuelle ?? null)
+        setSuggestions(metadata.suggestions || [])
+        setRecommendations(metadata.aides_recommandees || [])
+
+        // Redirection si nouvelle conversation
+        if (!id && finalHistoriqueId) {
+          navigate(`/dashboard/discussion/${finalHistoriqueId}`, { replace: true })
+        }
+      },
+
+      onError: () => {
+        // Supprimer la bulle streaming partielle
+        setMessages((prev) => prev.filter((m) => m.id !== STREAMING_BUBBLE_ID))
+
+        // Ajouter une bulle d'erreur
+        const errorMsg = {
+          id: Date.now() + 2,
+          sender: 'assistant',
+          text: "Impossible de contacter AidFinder IA.",
+          isError: true,
+          failedText: text,
+          timestamp: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, errorMsg])
+      },
+    })
   }
 
   const handleRetry = (failedText) => {
@@ -345,15 +419,18 @@ export default function DiscussionPage() {
 
       {/* Zone de messages */}
       <div className="flex-1 overflow-y-auto pr-1 max-w-3xl mx-auto w-full">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !isThinking && !isStreaming ? (
           <EmptyChatState onSelect={handleSuggestionSelect} />
         ) : (
           <div className="space-y-4 py-2">
             <AnimatePresence initial={false}>
               {messages.map((msg) => (
                 <div key={msg.id} className="space-y-2">
-                  <ConversationBubble msg={msg} />
-                  
+                  <ConversationBubble
+                    msg={msg}
+                    isStreaming={msg.id === STREAMING_BUBBLE_ID && isStreaming}
+                  />
+
                   {/* Si le message a échoué, afficher la carte d'erreur élégante */}
                   {msg.isError && (
                     <motion.div
@@ -379,9 +456,9 @@ export default function DiscussionPage() {
               ))}
             </AnimatePresence>
 
-            {/* Indicateur d'écriture */}
+            {/* Indicateur "IA réfléchit" — visible uniquement avant le 1er chunk */}
             <AnimatePresence>
-              {sending && (
+              {isThinking && (
                 <motion.div
                   key="typing-indicator"
                   variants={messageVariants}
@@ -394,7 +471,7 @@ export default function DiscussionPage() {
               )}
             </AnimatePresence>
 
-            {/* Suggestions de questions dynamiques */}
+            {/* Suggestions de questions dynamiques — depuis le backend uniquement */}
             {!sending && suggestions && suggestions.length > 0 && (
               <div className="ml-10">
                 <SuggestionButtons

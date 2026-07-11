@@ -8,8 +8,43 @@ const bubbleVariants = {
   exit: { opacity: 0, y: -6, transition: { duration: 0.15 } },
 }
 
-export default function ConversationBubble({ msg }) {
+/**
+ * Curseur clignotant affiché à la fin de la bulle IA pendant le streaming.
+ * Utilise une animation CSS pure pour éviter tout re-render inutile.
+ */
+function StreamingCursor() {
+  return (
+    <>
+      <style>{`
+        @keyframes aid-cursor-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        .aid-streaming-cursor {
+          display: inline-block;
+          width: 2px;
+          height: 1em;
+          background-color: currentColor;
+          margin-left: 2px;
+          vertical-align: text-bottom;
+          animation: aid-cursor-blink 0.8s ease-in-out infinite;
+        }
+      `}</style>
+      <span className="aid-streaming-cursor" aria-hidden="true" />
+    </>
+  )
+}
+
+/**
+ * Bulle de conversation (utilisateur ou assistant).
+ *
+ * @param {object} props
+ * @param {object}  props.msg         - Message à afficher
+ * @param {boolean} [props.isStreaming] - Si true, affiche un curseur clignotant (réponse IA en cours)
+ */
+export default function ConversationBubble({ msg, isStreaming = false }) {
   const isBot = msg.sender === 'assistant'
+  const lines = msg.text.split('\n')
 
   return (
     <motion.div
@@ -38,16 +73,18 @@ export default function ConversationBubble({ msg }) {
               : 'bg-[#2963E8] text-white rounded-br-none'
           }`}
         >
-          {msg.text.split('\n').map((line, i) => (
+          {lines.map((line, i) => (
             <span key={i}>
               {line}
-              {i < msg.text.split('\n').length - 1 && <br />}
+              {i < lines.length - 1 && <br />}
             </span>
           ))}
+          {/* Curseur clignotant uniquement sur la bulle IA pendant le streaming */}
+          {isBot && isStreaming && <StreamingCursor />}
         </div>
 
-        {/* Timestamp */}
-        {msg.timestamp && (
+        {/* Timestamp — masqué pendant le streaming */}
+        {msg.timestamp && !isStreaming && (
           <span className="text-[10px] text-muted-foreground/60 px-1">
             {formatLocalDateTime(msg.timestamp)}
           </span>
@@ -63,3 +100,4 @@ export default function ConversationBubble({ msg }) {
     </motion.div>
   )
 }
+
