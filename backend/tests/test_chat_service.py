@@ -7,6 +7,7 @@ from pathlib import Path
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("ALGORITHM", "HS256")
+os.environ.setdefault("OPENROUTER_API_KEY", "fake-test-key")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
@@ -27,30 +28,52 @@ from app.services.conversation_engine import (
 )
 from app.services.conversation_brain import IntentDetector, ProfileCollector, ConversationBrain
 from app.services.recommendation_engine import RecommendationEngine
-from app.services.response_generator import FallbackTemplates
+from app.services.response_generator import ConversationFallback
 
 
-class FakeQwenClient:
+class FakeLLMClient:
+    """Simulates the LLM client for testing."""
     def __init__(self):
         self.calls = []
         self.is_available = True
+        self.openrouter_available = True
+        self.qwen_available = False
 
     def generate(self, messages):
         self.calls.append(messages)
         content = messages[-1]["content"].lower() if messages else ""
         if any(w in content for w in ["bonjour", "salut", "bonsoir", "hello"]):
-            return "Bonjour ! Comment puis-je vous aider aujourd'hui ?"
+            return "Bonjour ! Je suis AidFinder. Comment puis-je vous aider aujourd'hui ?"
         if any(w in content for w in ["comment", "vas", "va"]):
-            return "Je vais très bien merci ! Et vous ?"
+            return "Je vais très bien merci ! Et vous ? Que puis-je faire pour vous ?"
         if any(w in content for w in ["meilleure", "meilleur", "laquelle"]):
             return "D'après votre profil, la Bourse étudiant est la meilleure option avec un score de 85/100."
+        if any(w in content for w in ["merci"]):
+            return "Avec plaisir ! N'hésitez pas si vous avez d'autres questions."
+        if any(w in content for w in ["au revoir", "bye"]):
+            return "Au revoir ! Bonne journée et à bientôt sur AidFinder."
         return "Je comprends. Pouvez-vous m'en dire plus sur votre situation ?"
-
-    def _clean(self, text: str) -> str:
-        return " ".join(str(text or "").split())
 
 
 class ChatServiceTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """Patch the global llm_client with the fake before any test runs."""
+        import app.services.response_generator as rg
+        import app.services.chat_service as cs
+        cls._original_llm = rg.llm_client
+        cls._fake_llm = FakeLLMClient()
+        rg.llm_client = cls._fake_llm
+        # The response_generator singleton already references llm_client via closure,
+        # but we need to patch the instance attribute
+        cs.response_generator.llm_client = cls._fake_llm
+
+    @classmethod
+    def tearDownClass(cls):
+        import app.services.response_generator as rg
+        import app.services.chat_service as cs
+        rg.llm_client = cls._original_llm
+
     def setUp(self):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(bind=self.engine)
@@ -92,8 +115,6 @@ class ChatServiceTestCase(unittest.TestCase):
         self.user = user
 
         self.service = ChatService()
-        self.fake_qwen = FakeQwenClient()
-        self.service.generator.qwen = self.fake_qwen
 
     def tearDown(self):
         self.db.close()
@@ -106,7 +127,6 @@ class ChatServiceTestCase(unittest.TestCase):
             self.user,
             "Bonjour",
         )
-        # Profile complet → DISCUSSING (pas besoin de collecter d'infos)
         self.assertIn(response["conversation_state"], ["DISCUSSING", "COLLECTING_INFO"])
         self.assertFalse(response["aides_recommandees"])
         bot_text = response["bot_message"]["contenu"].lower()
@@ -166,8 +186,9 @@ class ChatServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(response["conversation_state"], "COLLECTING_INFO")
         self.assertTrue(response["champs_manquants"])
-        self.assertTrue(response["question_actuelle"])
-        self.assertTrue(response["suggestions"])
+        # The LLM generates the response rather than the hardcoded question
+        # Check that suggestions are provided for field collection
+        self.assertTrue(len(response["suggestions"]) > 0)
 
     def test_recommendation_returns_full_details(self):
         """Phase 7 : une recommandation retourne score, raisons, lien, catégorie."""
@@ -273,7 +294,7 @@ class ChatServiceTestCase(unittest.TestCase):
         self.assertEqual(detector.detect("Comment ça va ?", meta), IntentCategory.HOW_ARE_YOU)
 
     def test_fallback_greeting_response(self):
-        fallback = FallbackTemplates()
+        fallback = ConversationFallback()
         decision = ConversationDecision(
             intent=IntentCategory.GREETING,
             new_state=ConversationState.GREETING,
@@ -289,7 +310,7 @@ class ChatServiceTestCase(unittest.TestCase):
         self.assertTrue("Bonjour" in response or "Salut" in response)
 
     def test_fallback_recommendation_response(self):
-        fallback = FallbackTemplates()
+        fallback = ConversationFallback()
         recommendations = [
             {
                 "titre": "Aide Test",
@@ -309,7 +330,7 @@ class ChatServiceTestCase(unittest.TestCase):
             clarification_needed=False,
         )
         meta = ConversationMeta()
-        response = fallback.generate(decision, meta, recommendations)
+        response = fallback.generate(decision, meta, recommendations=recommendations)
         self.assertIn("Aide Test", response)
         self.assertIn("85/100", response)
         self.assertIn("https://example.gov/aide", response)
@@ -328,6 +349,45 @@ class ChatServiceTestCase(unittest.TestCase):
         collector = ProfileCollector()
         result = collector.extract("J'ai une situation de handicap")
         self.assertTrue(result.get("handicap"))
+
+    def test_thanks_returns_natural_response(self):
+        """Merci retourne une réponse naturelle via LLM or fallback."""
+        response = self.service.handle_message(
+            self.db,
+            self.user,
+            "Merci beaucoup",
+        )
+        bot_text = response["bot_message"]["contenu"].lower()
+        self.assertFalse(response["aides_recommandees"])
+        # Should contain a thank-you-like response
+        self.assertTrue(
+            "plaisir" in bot_text or "merci" in bot_text or "problème" in bot_text
+            or "bien" in bot_text or "reviens" in bot_text or "hésitez" in bot_text
+        )
+
+    def test_goodbye_returns_natural_response(self):
+        """Au revoir retourne une réponse naturelle."""
+        response = self.service.handle_message(
+            self.db,
+            self.user,
+            "Au revoir",
+        )
+        bot_text = response["bot_message"]["contenu"].lower()
+        self.assertIn("revoir" in bot_text or "bientôt" in bot_text or "journée" in bot_text, [True])
+
+    def test_dynamic_suggestions_on_greeting(self):
+        """Les suggestions sont dynamiques et dépendent du contexte."""
+        response = self.service.handle_message(
+            self.db,
+            self.user,
+            "Bonjour",
+        )
+        self.assertTrue(len(response["suggestions"]) > 0)
+        # Suggestions should be relevant to what the user can ask
+        self.assertTrue(
+            any("emploi" in s.lower() or "étude" in s.lower() or "logement" in s.lower()
+                for s in response["suggestions"])
+        )
 
 
 if __name__ == "__main__":

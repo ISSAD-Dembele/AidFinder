@@ -10,7 +10,7 @@ from app.services.conversation_engine import (
     IntentCategory,
     StateMachine,
 )
-from app.services.response_generator import QwenClient
+from app.services.llm_client import llm_client
 
 
 class IntentDetector:
@@ -199,10 +199,8 @@ class ProfileCollector:
                 extracted[field] = match.group(0).strip().capitalize()
         return extracted
 
-    def extract_with_qwen(
-        self, message: str, qwen_client: QwenClient
-    ) -> dict[str, Any]:
-        if not qwen_client.is_available:
+    def extract_with_llm(self, message: str) -> dict[str, Any]:
+        if not llm_client.is_available:
             return {}
         prompt = (
             "Tu es un extracteur d'informations. Extrais les données suivantes "
@@ -214,7 +212,7 @@ class ProfileCollector:
             f"Message : {message}\n\n"
             "JSON :"
         )
-        result = qwen_client.generate([{"role": "user", "content": prompt}])
+        result = llm_client.generate([{"role": "user", "content": prompt}])
         if not result:
             return {}
         try:

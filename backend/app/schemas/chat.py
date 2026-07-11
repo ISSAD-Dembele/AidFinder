@@ -46,3 +46,11 @@ class ChatMessageResponse(BaseModel):
     @field_serializer("date_derniere_activite")
     def serialize_datetime(self, value: datetime | None):
         return as_utc(value)
+
+
+# ── Streaming SSE schemas ─────────────────────────────────────────────
+
+class ChatStreamMessageRequest(BaseModel):
+    """Same as ChatMessageRequest, but used for the streaming endpoint."""
+    historique_id: int | None = None
+    message: str = Field(..., min_length=1)

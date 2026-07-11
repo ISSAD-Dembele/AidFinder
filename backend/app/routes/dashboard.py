@@ -1,4 +1,9 @@
+from __future__ import annotations
+
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.securite import get_current_user
@@ -7,7 +12,7 @@ from app.models.utilisateurs import Utilisateur
 from app.models.historique import Historique
 from app.models.discussion import Discussion
 from app.core.datetime_utils import as_utc
-from app.schemas.chat import ChatMessageRequest, ChatMessageResponse
+from app.schemas.chat import ChatMessageRequest, ChatMessageResponse, ChatStreamMessageRequest
 from app.schemas.dashboard import (
     DashboardAidResponse,
     DashboardHistoryResponse,
@@ -160,6 +165,41 @@ def read_recent_aids(
     db: Session = Depends(get_db),
 ) -> list[DashboardAidResponse]:
     return get_recent_aids(db, current_user)
+
+
+@router.post("/chat/stream")
+async def send_chat_message_stream(
+    data: ChatStreamMessageRequest,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Streaming chat endpoint using Server-Sent Events (SSE).
+    
+    Yields:
+      - `data: {"type": "chunk", "data": "..."}` for each text delta
+      - `data: {"type": "done", "data": {...}}` with the final metadata
+    
+    The frontend can use EventSource or fetch + ReadableStream to consume this.
+    """
+    async def event_generator():
+        async for event in chat_service.handle_message_stream(
+            db=db,
+            user=current_user,
+            message=data.message,
+            historique_id=data.historique_id,
+        ):
+            yield f"data: {json.dumps(event, default=str)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/chat/{historique_id}/consultation/{aide_id}", response_model=dict)
