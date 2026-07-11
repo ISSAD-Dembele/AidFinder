@@ -20,6 +20,7 @@ from app.services.dashboard_service import (
     get_user_history,
     get_user_recommendations,
     get_user_stats,
+    record_aid_consultation,
 )
 from app.services.chat_service import chat_service
 
@@ -125,6 +126,21 @@ def read_recent_aids(
     db: Session = Depends(get_db),
 ) -> list[DashboardAidResponse]:
     return get_recent_aids(db, current_user)
+
+
+@router.post("/chat/{historique_id}/consultation/{aide_id}", response_model=dict)
+def record_chat_consultation(
+    historique_id: int,
+    aide_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    consultation = record_aid_consultation(db, current_user, aide_id)
+    return {
+        "message": "Consultation enregistrée avec succès.",
+        "consultation_id": consultation.id,
+        "aide_id": aide_id,
+    }
 
 
 @router.get("/stats", response_model=UserStatsResponse)

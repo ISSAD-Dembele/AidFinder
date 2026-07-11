@@ -1,9 +1,18 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field, field_serializer
 
 from app.core.datetime_utils import as_utc
 from app.schemas.dashboard import DashboardAidResponse
+
+
+class ConversationState(str, Enum):
+    GREETING = "GREETING"
+    COLLECTING_INFO = "COLLECTING_INFO"
+    RECOMMENDING = "RECOMMENDING"
+    DISCUSSING = "DISCUSSING"
+    CLARIFYING = "CLARIFYING"
 
 
 class ChatMessageRequest(BaseModel):
@@ -29,6 +38,10 @@ class ChatMessageResponse(BaseModel):
     user_message: ChatDiscussionMessage
     bot_message: ChatDiscussionMessage
     aides_recommandees: list[DashboardAidResponse] = Field(default_factory=list)
+    conversation_state: ConversationState = ConversationState.GREETING
+    champs_manquants: list[str] = Field(default_factory=list)
+    question_actuelle: str | None = None
+    suggestions: list[str] = Field(default_factory=list)
 
     @field_serializer("date_derniere_activite")
     def serialize_datetime(self, value: datetime | None):

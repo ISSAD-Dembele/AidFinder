@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 from app.core.datetime_utils import utc_now
@@ -11,6 +11,7 @@ class Historique(Base):
     titre_resume = Column(String, nullable=False)
     date_creation = Column(DateTime(timezone=True), default=utc_now)
     date_derniere_activite = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    conversation_meta = Column(Text, nullable=True)
     
     #les relations avec les autres tables
     utilisateur = relationship("Utilisateur", back_populates="historiques")

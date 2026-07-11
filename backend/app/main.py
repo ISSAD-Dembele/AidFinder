@@ -54,6 +54,7 @@ def ensure_runtime_columns():
         "ALTER TABLE aides ADD COLUMN IF NOT EXISTS est_active BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville VARCHAR",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_derniere_connexion TIMESTAMP NULL",
+        "ALTER TABLE historiques ADD COLUMN IF NOT EXISTS conversation_meta TEXT",
     )
     utc_datetime_columns = (
         ("utilisateurs", "date_creation"),
