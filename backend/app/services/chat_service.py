@@ -5,14 +5,18 @@ Handles the full message lifecycle:
 1. Load/create history
 2. Detect intent & decide state
 3. Collect profile info
-4. Compute recommendations (if needed)
-5. Generate LLM response (with history context)
+4. Generate LLM response (without recommendations)
+5. After response: if profile is complete → compute recommendations → enrich response
 6. Save messages & recommendations
 7. Return response with dynamic suggestions
+
+The LLM is the true driver of the conversation.
+Recommendations are only computed AFTER the LLM has responded naturally.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any
 
@@ -29,6 +33,8 @@ from app.services.conversation_brain import ConversationBrain
 from app.services.conversation_engine import ConversationMeta, IntentCategory
 from app.services.recommendation_engine import recommendation_engine
 from app.services.response_generator import response_generator
+
+logger = logging.getLogger("aidfinder.chat_service")
 
 MAX_HISTORY_MESSAGES = 10
 MAX_RESPONSE_CHARS = 2500
@@ -184,6 +190,9 @@ class ChatService:
                 detail="Le message ne peut pas être vide.",
             )
 
+        logger.info("[HANDLE] Nouveau message user_id=%d | msg=%s | historique_id=%s",
+                     user.user_id, clean_message[:100], historique_id)
+
         history_item = self.memory.get_or_create_history(
             db, user, clean_message, historique_id
         )
@@ -195,27 +204,72 @@ class ChatService:
         meta.state = decision.new_state
         meta.collected_fields.update(decision.extracted_info)
 
+        logger.info("[HANDLE] Décision — intent=%s | new_state=%s | profil_complet=%s | extrait=%s",
+                     decision.intent.value, decision.new_state.value,
+                     self.brain.profile_collector.is_complete(decision.merged_profile),
+                     decision.extracted_info)
+
         # Load conversation history for LLM context
         history = self.memory.load_recent_messages(db, history_item)
+        logger.info("[HANDLE] Historique chargé: %d messages", len(history))
 
+        # Step 1: Generate LLM response WITHOUT recommendations
+        # The LLM responds naturally — it may ask questions, discuss, etc.
+        logger.info("[HANDLE] ÉTAPE 1 — Génération de la réponse LLM initiale (sans recommendations)")
+        first_response = response_generator.generate(
+            decision,
+            meta,
+            clean_message,
+            history=history,
+            recommendations=None,
+        )
+        logger.info("[HANDLE] ÉTAPE 1 terminée — réponse=%s...", first_response[:100])
+
+        # Step 2: After LLM has responded, check if we should compute recommendations
         recommendations = None
-        if decision.should_recommend:
+        should_recommend = self.brain.should_recommend_after_response(
+            meta, decision.merged_profile, intent=decision.intent
+        )
+        logger.info("[HANDLE] ÉTAPE 2 — Vérification post-réponse: should_recommend=%s | "
+                     "recommendation_shown=%s | profil_complet=%s",
+                     should_recommend, meta.recommendation_shown,
+                     self.brain.profile_collector.is_complete(decision.merged_profile))
+
+        if should_recommend:
+            logger.info("[HANDLE] ÉTAPE 2 — Calcul des recommendations...")
             recommendations = recommendation_engine.get_recommendations(
                 db, decision.merged_profile, limit=5
             )
-            meta.recommendation_shown = True
-            meta.last_recommended_aids = [
-                r["aide_id"] for r in (recommendations or [])
-            ]
+            logger.info("[HANDLE] ÉTAPE 2 — %d recommendation(s) trouvée(s)",
+                         len(recommendations) if recommendations else 0)
+
+            if recommendations:
+                meta.recommendation_shown = True
+                meta.last_recommended_aids = [
+                    r["aide_id"] for r in recommendations
+                ]
+                logger.info("[HANDLE] Recommendations enregistrées: %s",
+                             [r["aide_id"] for r in recommendations])
+
+                # Step 3: Generate enriched response that naturally includes recommendations
+                logger.info("[HANDLE] ÉTAPE 3 — Enrichissement de la réponse avec les recommendations")
+                bot_text = response_generator.generate_enriched(
+                    decision,
+                    meta,
+                    clean_message,
+                    first_response,
+                    history=history,
+                    recommendations=recommendations,
+                )
+                logger.info("[HANDLE] ÉTAPE 3 terminée — réponse enrichie=%s...", bot_text[:100])
+            else:
+                logger.info("[HANDLE] Aucune recommendation trouvée — utilisation de la réponse initiale")
+                bot_text = first_response
+        else:
+            logger.info("[HANDLE] Pas de recommendations nécessaires — utilisation réponse initiale")
+            bot_text = first_response
 
         try:
-            bot_text = response_generator.generate(
-                decision,
-                meta,
-                clean_message,
-                history=history,
-                recommendations=recommendations,
-            )
             user_msg = Discussion(
                 historique_id=history_item.historique_id,
                 expediteur="user",
@@ -287,6 +341,12 @@ class ChatService:
         """
         Async generator for streaming responses.
         Yields chunks as they arrive from the LLM, then yields the final metadata.
+
+        Flow:
+        1. First LLM call (no recommendations) → buffer all chunks
+        2. After first call: check if profile is complete
+        3. If complete → compute recommendations → second LLM call (enriched) → stream
+        4. If not complete → stream the buffered first response
         """
         clean_message = _clean_text(message)
         if not clean_message:
@@ -294,6 +354,9 @@ class ChatService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Le message ne peut pas être vide.",
             )
+
+        logger.info("[STREAM] Nouveau stream user_id=%d | msg=%s | historique_id=%s",
+                     user.user_id, clean_message[:100], historique_id)
 
         history_item = self.memory.get_or_create_history(
             db, user, clean_message, historique_id
@@ -306,17 +369,12 @@ class ChatService:
         meta.state = decision.new_state
         meta.collected_fields.update(decision.extracted_info)
 
-        history = self.memory.load_recent_messages(db, history_item)
+        logger.info("[STREAM] Décision — intent=%s | new_state=%s | profil_complet=%s",
+                     decision.intent.value, decision.new_state.value,
+                     self.brain.profile_collector.is_complete(decision.merged_profile))
 
-        recommendations = None
-        if decision.should_recommend:
-            recommendations = recommendation_engine.get_recommendations(
-                db, decision.merged_profile, limit=5
-            )
-            meta.recommendation_shown = True
-            meta.last_recommended_aids = [
-                r["aide_id"] for r in (recommendations or [])
-            ]
+        history = self.memory.load_recent_messages(db, history_item)
+        logger.info("[STREAM] Historique chargé: %d messages", len(history))
 
         # Save user message immediately
         user_msg = Discussion(
@@ -336,18 +394,71 @@ class ChatService:
         db.flush()
 
         try:
-            full_text_parts: list[str] = []
+            # Step 1: Buffer the first LLM response (no recommendations)
+            logger.info("[STREAM] ÉTAPE 1 — Bufferisation de la réponse LLM initiale")
+            first_chunks: list[str] = []
             async for chunk in response_generator.generate_stream(
                 decision,
                 meta,
                 clean_message,
                 history=history,
-                recommendations=recommendations,
+                recommendations=None,
             ):
-                full_text_parts.append(chunk)
-                yield {"type": "chunk", "data": chunk}
+                first_chunks.append(chunk)
 
-            full_text = "".join(full_text_parts)
+            first_response = "".join(first_chunks)
+            logger.info("[STREAM] ÉTAPE 1 terminée — %d chunks bufferisés (%d caractères)",
+                         len(first_chunks), len(first_response))
+
+            # Step 2: After LLM has responded, check if we should compute recommendations
+            recommendations = None
+            should_recommend = self.brain.should_recommend_after_response(
+                meta, decision.merged_profile, intent=decision.intent
+            )
+            logger.info("[STREAM] ÉTAPE 2 — should_recommend=%s | recommendation_shown=%s",
+                         should_recommend, meta.recommendation_shown)
+
+            if should_recommend:
+                logger.info("[STREAM] ÉTAPE 2 — Calcul des recommendations...")
+                recommendations = recommendation_engine.get_recommendations(
+                    db, decision.merged_profile, limit=5
+                )
+                logger.info("[STREAM] ÉTAPE 2 — %d recommendation(s) trouvée(s)",
+                             len(recommendations) if recommendations else 0)
+
+                if recommendations:
+                    meta.recommendation_shown = True
+                    meta.last_recommended_aids = [
+                        r["aide_id"] for r in recommendations
+                    ]
+
+                    # Step 3: Stream the enriched response
+                    logger.info("[STREAM] ÉTAPE 3 — Streaming de la réponse enrichie")
+                    enriched_chunks: list[str] = []
+                    async for chunk in response_generator.generate_enriched_stream(
+                        decision,
+                        meta,
+                        clean_message,
+                        first_response,
+                        history=history,
+                        recommendations=recommendations,
+                    ):
+                        enriched_chunks.append(chunk)
+                        yield {"type": "chunk", "data": chunk}
+
+                    full_text = "".join(enriched_chunks)
+                    logger.info("[STREAM] ÉTAPE 3 terminée — %d chunks enrichis (%d caractères)",
+                                 len(enriched_chunks), len(full_text))
+                else:
+                    logger.info("[STREAM] Aucune recommendation — streaming réponse initiale")
+                    for chunk in first_chunks:
+                        yield {"type": "chunk", "data": chunk}
+                    full_text = first_response
+            else:
+                logger.info("[STREAM] Pas de recommendations — streaming réponse initiale")
+                for chunk in first_chunks:
+                    yield {"type": "chunk", "data": chunk}
+                full_text = first_response
 
             # Save message & recommendations
             bot_msg.contenu = _clean_text(full_text, MAX_RESPONSE_CHARS)

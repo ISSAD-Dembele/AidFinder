@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import date
 from typing import Any
@@ -11,6 +12,8 @@ from app.services.conversation_engine import (
     StateMachine,
 )
 from app.services.llm_client import llm_client
+
+logger = logging.getLogger("aidfinder.conversation_brain")
 
 
 class IntentDetector:
@@ -263,6 +266,11 @@ class ConversationBrain:
         conversation_meta: ConversationMeta,
         user_profile: dict,
     ) -> ConversationDecision:
+        logger.info("[DECIDE] Analyse du message: %s", user_message[:100])
+        logger.info("[DECIDE] État actuel: %s | Profil DB: %s",
+                     conversation_meta.state.value,
+                     {k: v for k, v in user_profile.items() if v})
+
         intent = self.intent_detector.detect(user_message, conversation_meta)
         extracted = self.profile_collector.extract(user_message)
         merged = self._merge_profiles(user_profile, conversation_meta.collected_fields, extracted)
@@ -270,14 +278,16 @@ class ConversationBrain:
         new_state = self.state_machine.next_state(
             conversation_meta.state, intent, profile_complete
         )
-        should_recommend = self._should_recommend(
-            intent, new_state, profile_complete, conversation_meta
-        )
+
+        logger.info("[DECIDE] Résultat — intent=%s | new_state=%s | "
+                     "extracted=%s | profil_complet=%s | champs_manquants=%s",
+                     intent.value, new_state.value,
+                     extracted, profile_complete,
+                     self.profile_collector.missing_fields(merged))
 
         return ConversationDecision(
             intent=intent,
             new_state=new_state,
-            should_recommend=should_recommend,
             # The LLM decides whether to ask questions — not the state machine
             should_ask_question=False,
             field_to_ask=None,
@@ -287,27 +297,39 @@ class ConversationBrain:
             clarification_needed=False,
         )
 
-    def _should_recommend(
+    def should_recommend_after_response(
         self,
-        intent: IntentCategory,
-        new_state: ConversationState,
-        profile_complete: bool,
         meta: ConversationMeta,
+        merged_profile: dict,
+        intent: IntentCategory | None = None,
     ) -> bool:
-        if new_state == ConversationState.RECOMMENDING:
-            return True
+        """
+        Décide si des recommandations doivent être calculées APRÈS que le LLM a répondu.
+        Basé sur :
+        - Le profil est complet (tous les champs requis sont remplis)
+        - Les recommandations n'ont pas déjà été montrées
+        - Le contexte conversationnel est pertinent (pas une simple salutation/merci)
+        """
         if meta.recommendation_shown:
+            logger.info("[RECOMMEND_CHECK] Déjà montré — skip")
             return False
-        if profile_complete and intent in {
-            IntentCategory.SEARCH_JOB,
-            IntentCategory.SEARCH_STUDY,
-            IntentCategory.SEARCH_HOUSING,
-            IntentCategory.SEARCH_HEALTH,
-            IntentCategory.SEARCH_BUSINESS,
-            IntentCategory.ASK_BEST,
+        if not self.profile_collector.is_complete(merged_profile):
+            logger.info("[RECOMMEND_CHECK] Profil incomplet — champs manquants: %s",
+                         self.profile_collector.missing_fields(merged_profile))
+            return False
+        # Ne pas recommander si l'intention est purement sociale
+        if intent and intent in {
+            IntentCategory.GREETING,
+            IntentCategory.HOW_ARE_YOU,
+            IntentCategory.THANKS,
+            IntentCategory.GOODBYE,
+            IntentCategory.HELP,
         }:
-            return True
-        return False
+            logger.info("[RECOMMEND_CHECK] Intention sociale (%s) — pas de recommandation", intent.value)
+            return False
+        logger.info("[RECOMMEND_CHECK] ✅ Profil complet + intention pertinente (%s) — recommandation autorisée",
+                     intent.value if intent else "N/A")
+        return True
 
     def _merge_profiles(
         self, db_profile: dict, collected: dict, extracted: dict

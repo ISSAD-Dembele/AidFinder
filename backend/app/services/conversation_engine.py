@@ -7,7 +7,6 @@ from typing import Any
 class ConversationState(str, Enum):
     GREETING = "GREETING"
     COLLECTING_INFO = "COLLECTING_INFO"
-    RECOMMENDING = "RECOMMENDING"
     DISCUSSING = "DISCUSSING"
     CLARIFYING = "CLARIFYING"
 
@@ -65,7 +64,6 @@ class ConversationMeta:
 class ConversationDecision:
     intent: IntentCategory
     new_state: ConversationState
-    should_recommend: bool
     should_ask_question: bool
     field_to_ask: str | None
     extracted_info: dict
@@ -103,29 +101,20 @@ class StateMachine:
         Transitions are purely informational for the LLM.
         """
         if current == ConversationState.GREETING:
-            # Greetings and social chat → stay in GREETING or move to DISCUSSING
             if intent in self.GREETING_INTENTS:
                 return ConversationState.GREETING
-            # User starts asking for help → move to DISCUSSING (not COLLECTING_INFO directly)
             if intent in self.REQUEST_INTENTS:
                 return ConversationState.DISCUSSING
-            # Unknown → let LLM handle it naturally
             return ConversationState.GREETING
 
         if current == ConversationState.COLLECTING_INFO:
             if profile_complete:
                 return ConversationState.DISCUSSING
-            # Stay in COLLECTING_INFO only if we're already there
             return ConversationState.COLLECTING_INFO
-
-        if current == ConversationState.RECOMMENDING:
-            if intent in self.REQUEST_INTENTS:
-                return ConversationState.RECOMMENDING
-            return ConversationState.DISCUSSING
 
         if current == ConversationState.DISCUSSING:
             if intent in self.REQUEST_INTENTS:
-                return ConversationState.RECOMMENDING
+                return ConversationState.DISCUSSING
             return ConversationState.DISCUSSING
 
         if current == ConversationState.CLARIFYING:

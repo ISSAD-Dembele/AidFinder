@@ -160,9 +160,8 @@ class ChatServiceTestCase(unittest.TestCase):
             self.user,
             "Je cherche un emploi",
         )
-        # The state machine tracks context — RECOMMENDING is set when should_recommend is True
-        # and the state machine transitions from GREETING to DISCUSSING for REQUEST_INTENTS
-        self.assertIn(response["conversation_state"], ["DISCUSSING", "RECOMMENDING"])
+        # The state machine tracks context — transitions from GREETING to DISCUSSING for REQUEST_INTENTS
+        self.assertEqual(response["conversation_state"], "DISCUSSING")
         if response["aides_recommandees"]:
             aid = response["aides_recommandees"][0]
             self.assertIn("score_matching", aid)
@@ -303,7 +302,6 @@ class ChatServiceTestCase(unittest.TestCase):
         decision = ConversationDecision(
             intent=IntentCategory.GREETING,
             new_state=ConversationState.GREETING,
-            should_recommend=False,
             should_ask_question=False,
             field_to_ask=None,
             extracted_info={},
@@ -326,8 +324,7 @@ class ChatServiceTestCase(unittest.TestCase):
         ]
         decision = ConversationDecision(
             intent=IntentCategory.SEARCH_JOB,
-            new_state=ConversationState.RECOMMENDING,
-            should_recommend=True,
+            new_state=ConversationState.DISCUSSING,
             should_ask_question=False,
             field_to_ask=None,
             extracted_info={},

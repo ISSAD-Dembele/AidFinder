@@ -3,11 +3,18 @@ Response generator for AidFinder.
 
 LLM-first approach: tries OpenRouter → Qwen → conversation engine fallback.
 The LLM produces ALL responses naturally - no more hardcoded if/else replies.
+
+Post-response enrichment:
+1. First LLM call: generates a conversational response WITHOUT recommendations
+2. If profile is complete → backend computes recommendations → second LLM call
+   with recommendations context → enriched final response
+3. If profile is not complete → first response is used as-is
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.services.conversation_engine import (
@@ -17,6 +24,8 @@ from app.services.conversation_engine import (
     IntentCategory,
 )
 from app.services.llm_client import llm_client
+
+logger = logging.getLogger("aidfinder.response_generator")
 
 
 # ─── Prompt builder ─────────────────────────────────────────────────────
@@ -50,6 +59,22 @@ class PromptBuilder:
         "12. Tu es AidFinder, pas un assistant générique.\n\n"
     )
 
+    ENRICHMENT_INSTRUCTION = (
+        "\n\nINSTRUCTION : L'utilisateur t'a déjà envoyé son message plus tôt dans la conversation, "
+        "et tu as déjà commencé à y répondre naturellement ci-dessous.\n"
+        "MAINTENANT, on te fournit des aides calculées spécifiquement pour son profil.\n\n"
+        "Ton objectif : RÉÉCRIRE ta réponse entièrement pour y intégrer ces aides de façon naturelle.\n"
+        "Ne te contente PAS d'ajouter les aides à la fin. Reprends depuis le début.\n"
+        "Structure attendue :\n"
+        "1. Réponds d'abord naturellement au message de l'utilisateur (accuser réception, etc.)\n"
+        "2. Ensuite, présente les aides disponibles de façon claire et personnalisée\n"
+        "3. Termine par une question ouverte ou une proposition d'aide supplémentaire\n\n"
+        "IMPORTANT :\n"
+        "- Tu ne dois JAMAIS inventer une aide. Utilise UNIQUEMENT les aides listées.\n"
+        "- Si la liste est vide, explique-le honnêtement.\n"
+        "- réponds de manière chaleureuse et concise.\n"
+    )
+
     def build_system_prompt(
         self,
         decision: ConversationDecision,
@@ -77,7 +102,49 @@ class PromptBuilder:
             )
             parts.append(self.HISTORY_TEMPLATE.format(history=history_str))
 
-        # Recommended aids if available
+        parts.append(
+            "Réponds maintenant au message de l'utilisateur de manière naturelle, "
+            "chaleureuse et concise.\n\n"
+            "Tu es libre de répondre comme un vrai conseiller. "
+            "Ne pose des questions sur le profil que si c'est naturel dans la conversation. "
+            "Si l'utilisateur te salue, salue-le en retour. "
+            "Si l'utilisateur te demande qui tu es, présente-toi. "
+            "Si l'utilisateur commence à parler de sa situation, "
+            "écoute et pose des questions pertinentes une par une."
+        )
+
+        return "\n".join(parts)
+
+    def build_enriched_prompt(
+        self,
+        decision: ConversationDecision,
+        meta: ConversationMeta,
+        user_message: str,
+        first_response: str,
+        history: list[dict] | None = None,
+        recommendations: list[dict] | None = None,
+    ) -> list[dict]:
+        """
+        Build a prompt for the enriched LLM call that includes recommendations.
+        The LLM rewrites its response to naturally include the computed aids.
+        """
+        profile_str = json.dumps(decision.merged_profile, default=str, ensure_ascii=False)
+
+        parts = [self.SYSTEM_PROMPT]
+
+        parts.append(f"Profil utilisateur : {profile_str}\n")
+        parts.append(f"État conversationnel : {decision.new_state.value}\n")
+        parts.append(f"Intention détectée : {decision.intent.value}\n")
+
+        if history:
+            history_str = "\n".join(
+                f"{'Utilisateur' if m['role'] == 'user' else 'AidFinder'} : "
+                f"{m['content']}"
+                for m in history[-10:]
+            )
+            parts.append(self.HISTORY_TEMPLATE.format(history=history_str))
+
+        # Recommendations
         if recommendations:
             aids_json = json.dumps(
                 [
@@ -101,23 +168,22 @@ class PromptBuilder:
                 ensure_ascii=False,
             )
             parts.append(self.RECOMMENDATIONS_TEMPLATE.format(aids=aids_json))
-            parts.append(
-                "RAPPEL : Tu ne dois JAMAIS inventer une aide. "
-                "Tu ne peux parler que des aides listées ci-dessus.\n"
-            )
 
-        parts.append(
-            "Réponds maintenant au message de l'utilisateur de manière naturelle, "
-            "chaleureuse et concise.\n\n"
-            "Tu es libre de répondre comme un vrai conseiller. "
-            "Ne pose des questions sur le profil que si c'est naturel dans la conversation. "
-            "Si l'utilisateur te salue, salue-le en retour. "
-            "Si l'utilisateur te demande qui tu es, présente-toi. "
-            "Si l'utilisateur commence à parler de sa situation, "
-            "écoute et pose des questions pertinentes une par une."
-        )
+        parts.append(self.ENRICHMENT_INSTRUCTION)
 
-        return "\n".join(parts)
+        system_prompt = "\n".join(parts)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": first_response},
+        ]
+
+        logger.debug("[ENRICHED PROMPT] System prompt (%d caractères)", len(system_prompt))
+        logger.debug("[ENRICHED PROMPT] User message: %s", user_message[:200])
+        logger.debug("[ENRICHED PROMPT] First assistant response: %s...", first_response[:200])
+
+        return messages
 
     def build_messages(
         self,
@@ -128,6 +194,7 @@ class PromptBuilder:
         recommendations: list[dict] | None = None,
     ) -> list[dict]:
         system = self.build_system_prompt(decision, meta, history, recommendations)
+        logger.debug("[PROMPT] System prompt construit (%d caractères)", len(system))
         return [
             {"role": "system", "content": system},
             {"role": "user", "content": user_message},
@@ -140,7 +207,6 @@ class ConversationFallback:
     """
     Fallback engine that uses the existing conversation state machine
     to produce responses when the LLM is unavailable.
-    No hardcoded templates - uses the brain's decision to construct responses.
     """
 
     def generate(
@@ -150,43 +216,43 @@ class ConversationFallback:
         history: list[dict] | None = None,
         recommendations: list[dict] | None = None,
     ) -> str:
+        logger.warning("[FALLBACK] LLM indisponible — utilisation du moteur de fallback")
         state = decision.new_state
         intent = decision.intent
 
         # ── Greeting / social conversation ──────────────────────────
         if intent in (IntentCategory.GREETING, IntentCategory.HOW_ARE_YOU, IntentCategory.HELP):
+            logger.info("[FALLBACK] Intention sociale détectée: %s", intent.value)
             return self._greeting_response(state, intent, decision)
 
         if intent == IntentCategory.THANKS:
+            logger.info("[FALLBACK] Intention merci")
             return self._thanks_response()
 
         if intent == IntentCategory.GOODBYE:
+            logger.info("[FALLBACK] Intention au revoir")
             return self._goodbye_response()
 
         # ── Profile query ───────────────────────────────────────────
         if intent == IntentCategory.ASK_PROFILE:
+            logger.info("[FALLBACK] Demande de profil")
             return self._profile_response(decision.merged_profile)
 
         # ── Recommendations ─────────────────────────────────────────
-        if decision.should_recommend and recommendations:
+        if recommendations:
+            logger.info("[FALLBACK] Recommendations disponibles — %d aide(s)", len(recommendations))
             return self._recommendation_response(recommendations)
-
-        if decision.should_recommend and not recommendations:
-            return (
-                "Je n'ai malheureusement trouvé aucune aide correspondant "
-                "à votre profil dans notre base actuelle. 😕\n\n"
-                "Je vous invite à revenir plus tard, de nouvelles aides "
-                "sont ajoutées régulièrement."
-            )
 
         # ── Collecting info / asking question ───────────────────────
         if decision.field_to_ask:
+            logger.info("[FALLBACK] Champ manquant: %s", decision.field_to_ask)
             from app.services.conversation_brain import ProfileCollector
             collector = ProfileCollector()
             return collector.get_question(decision.field_to_ask)
 
         # ── Clarification ───────────────────────────────────────────
         if decision.clarification_needed:
+            logger.info("[FALLBACK] Clarification nécessaire")
             return (
                 "Je n'ai pas bien compris votre demande. 🤔\n\n"
                 "Pouvez-vous reformuler ? Par exemple :\n"
@@ -196,6 +262,7 @@ class ConversationFallback:
             )
 
         # ── Default ─────────────────────────────────────────────────
+        logger.info("[FALLBACK] Réponse par défaut (aucun cas spécifique)")
         return (
             "Je suis là pour vous aider à trouver des aides "
             "financières et sociales adaptées à votre situation.\n\n"
@@ -303,16 +370,66 @@ class ResponseGenerator:
         history: list[dict] | None = None,
         recommendations: list[dict] | None = None,
     ) -> str:
+        logger.info("[GENERATE] Début — appel LLM (avec recommendations=%s)",
+                     "oui" if recommendations else "non")
+
+        if recommendations:
+            logger.info("[GENERATE] Recommendations fournies en entrée: %d aide(s)",
+                         len(recommendations))
+        else:
+            logger.info("[GENERATE] Pas de recommendations — LLM répond librement")
+
         # Always try LLM first
         if llm_client.is_available:
+            logger.info("[GENERATE] LLM disponible — construction du prompt")
             messages = self.prompt_builder.build_messages(
                 decision, meta, user_message, history, recommendations
             )
             response = llm_client.generate(messages)
             if response and response.strip():
+                logger.info("[GENERATE] Réponse LLM obtenue (%d caractères)", len(response))
                 return response
+            logger.warning("[GENERATE] LLM a retourné une réponse vide ou None")
+        else:
+            logger.warning("[GENERATE] LLM non disponible")
 
         # Fallback to conversation engine
+        logger.warning("[GENERATE] UTILISATION DU FALLBACK — LLM indisponible ou réponse vide")
+        return self.fallback.generate(decision, meta, history, recommendations)
+
+    def generate_enriched(
+        self,
+        decision: ConversationDecision,
+        meta: ConversationMeta,
+        user_message: str,
+        first_response: str,
+        history: list[dict] | None = None,
+        recommendations: list[dict] | None = None,
+    ) -> str:
+        """
+        Generate an enriched response that naturally integrates recommendations
+        into the conversation. The first_response from the initial LLM call
+        is used as context for the rewritten response.
+        """
+        logger.info("[ENRICHED] Début — appel LLM enrichi avec %d recommendations",
+                     len(recommendations) if recommendations else 0)
+        logger.info("[ENRICHED] Première réponse (%d caractères) va être enrichie", len(first_response))
+        logger.info("[ENRICHED] Recommendations: %s",
+                     [r["titre"] for r in (recommendations or [])])
+
+        if not llm_client.is_available:
+            logger.warning("[ENRICHED] LLM indisponible — fallback direct")
+            return self.fallback.generate(decision, meta, history, recommendations)
+
+        messages = self.prompt_builder.build_enriched_prompt(
+            decision, meta, user_message, first_response, history, recommendations
+        )
+        response = llm_client.generate(messages)
+        if response and response.strip():
+            logger.info("[ENRICHED] Réponse enrichie obtenue (%d caractères)", len(response))
+            return response
+
+        logger.warning("[ENRICHED] LLM enrichi a échoué — fallback")
         return self.fallback.generate(decision, meta, history, recommendations)
 
     async def generate_stream(
@@ -324,8 +441,11 @@ class ResponseGenerator:
         recommendations: list[dict] | None = None,
     ):
         """Async generator yielding response text chunks."""
+        logger.info("[STREAM] Début stream (avec recommendations=%s)",
+                     "oui" if recommendations else "non")
+
         if not llm_client.is_available:
-            # No LLM → yield the fallback as a single chunk
+            logger.warning("[STREAM] LLM indisponible — fallback en un chunk")
             text = self.fallback.generate(decision, meta, history, recommendations)
             yield text
             return
@@ -336,14 +456,62 @@ class ResponseGenerator:
         stream = await llm_client.generate_stream(messages)
 
         if stream is None:
-            # Stream not available → fallback
+            logger.warning("[STREAM] Stream non disponible — fallback")
             text = self.fallback.generate(decision, meta, history, recommendations)
             yield text
             return
 
+        chunk_count = 0
+        logger.info("[STREAM] Stream démarré avec succès")
         async with stream:
             async for chunk in stream.iter_text_chunks():
+                chunk_count += 1
                 yield chunk
+
+        logger.info("[STREAM] Stream terminé — %d chunks envoyés", chunk_count)
+
+    async def generate_enriched_stream(
+        self,
+        decision: ConversationDecision,
+        meta: ConversationMeta,
+        user_message: str,
+        first_response: str,
+        history: list[dict] | None = None,
+        recommendations: list[dict] | None = None,
+    ):
+        """
+        Async generator yielding enriched response chunks that naturally
+        integrate recommendations into the conversation.
+        """
+        logger.info("[ENRICHED STREAM] Début — stream enrichi avec %d recommendations",
+                     len(recommendations) if recommendations else 0)
+        logger.info("[ENRICHED STREAM] Première réponse: %s...", first_response[:200])
+
+        if not llm_client.is_available:
+            logger.warning("[ENRICHED STREAM] LLM indisponible — fallback")
+            text = self.fallback.generate(decision, meta, history, recommendations)
+            yield text
+            return
+
+        messages = self.prompt_builder.build_enriched_prompt(
+            decision, meta, user_message, first_response, history, recommendations
+        )
+        stream = await llm_client.generate_stream(messages)
+
+        if stream is None:
+            logger.warning("[ENRICHED STREAM] Stream non disponible — fallback")
+            text = self.fallback.generate(decision, meta, history, recommendations)
+            yield text
+            return
+
+        chunk_count = 0
+        logger.info("[ENRICHED STREAM] Stream enrichi démarré")
+        async with stream:
+            async for chunk in stream.iter_text_chunks():
+                chunk_count += 1
+                yield chunk
+
+        logger.info("[ENRICHED STREAM] Stream terminé — %d chunks", chunk_count)
 
 
 # Singleton
