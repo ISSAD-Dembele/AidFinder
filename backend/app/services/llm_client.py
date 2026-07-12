@@ -10,7 +10,16 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
+import traceback
 from typing import Any
+
+# Force UTF-8 encoding on stdout/stderr to prevent UnicodeEncodeError
+# when logging messages contain non-ASCII characters (French accents, etc.)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 import httpx
 import requests
@@ -230,8 +239,8 @@ class LLMClient:
         except httpx.HTTPError as e:
             logger.error("[OpenRouter stream] ERREUR HTTPX — %s", e)
             return None
-        except Exception as e:
-            logger.error("[OpenRouter stream] ERREUR INATTENDUE — %s: %s", type(e).__name__, e)
+        except Exception:
+            logger.exception("[OpenRouter stream] ERREUR INATTENDUE — stack trace complète:\n%s", traceback.format_exc())
             return None
 
     # ── Qwen helpers ──────────────────────────────────────────────────
@@ -346,8 +355,8 @@ class LLMClient:
         except httpx.HTTPError as e:
             logger.error("[Qwen stream] ERREUR HTTPX — %s", e)
             return None
-        except Exception as e:
-            logger.error("[Qwen stream] ERREUR INATTENDUE — %s: %s", type(e).__name__, e)
+        except Exception:
+            logger.exception("[Qwen stream] ERREUR INATTENDUE — stack trace complète:\n%s", traceback.format_exc())
             return None
 
     # ── Shared helpers ────────────────────────────────────────────────
