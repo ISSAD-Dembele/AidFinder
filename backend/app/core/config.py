@@ -2,10 +2,10 @@ from dotenv import load_dotenv
 import os
 
 # charge le fichier environnement .env
-load_dotenv()
-
-print(os.getenv("OPENROUTER_API_KEY"))
-print(os.getenv("OPENROUTER_MODEL"))
+loaded = load_dotenv()
+print(f"[CONFIG] load_dotenv() a trouvé .env ? {loaded}")
+print(f"[CONFIG] OPENROUTER_API_KEY = |{os.getenv('OPENROUTER_API_KEY', 'NON_TROUVÉ')}|")
+print(f"[CONFIG] OPENROUTER_MODEL  = |{os.getenv('OPENROUTER_MODEL', 'NON_TROUVÉ')}|")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SECRET_KEY = os.getenv("SECRET_KEY")

@@ -139,7 +139,7 @@ class LLMClient:
             resp = requests.post(
                 OPENROUTER_API_URL,
                 headers={
-                    "Authorization": "Bearer [API_KEY_CACHÉE]",
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": OPENROUTER_SITE_URL,
                     "X-Title": OPENROUTER_SITE_NAME,
@@ -203,11 +203,17 @@ class LLMClient:
 
         try:
             async with httpx.AsyncClient(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
+                # DIAGNOSTIC TEMPORAIRE — à supprimer après résolution
+                logger.info(
+                    "Authorization header length=%s first10=%s",
+                    len(OPENROUTER_API_KEY or ""),
+                    (OPENROUTER_API_KEY or "")[:10]
+                )
                 async with client.stream(
                     "POST",
                     OPENROUTER_API_URL,
                     headers={
-                        "Authorization": "Bearer [API_KEY_CACHÉE]",
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                         "Content-Type": "application/json",
                         "HTTP-Referer": OPENROUTER_SITE_URL,
                         "X-Title": OPENROUTER_SITE_NAME,
@@ -259,7 +265,7 @@ class LLMClient:
             resp = requests.post(
                 QWEN_API_URL,
                 headers={
-                    "Authorization": "Bearer [API_KEY_CACHÉE]",
+                    "Authorization": f"Bearer {QWEN_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -325,7 +331,7 @@ class LLMClient:
                     "POST",
                     QWEN_API_URL,
                     headers={
-                        "Authorization": "Bearer [API_KEY_CACHÉE]",
+                        "Authorization": f"Bearer {QWEN_API_KEY}",
                         "Content-Type": "application/json",
                     },
                     json={
