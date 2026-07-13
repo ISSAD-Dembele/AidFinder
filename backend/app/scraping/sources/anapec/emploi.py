@@ -14,16 +14,26 @@ Utilise le pipeline de scraping existant :
 Architecture calquée sur news.py.
 """
 
+import warnings
 from app.scraping.utils import (
-    get_soup, clean_text,
+    clean_text,
     extract_absolute_url,
     sleep_random, log_scraping_error,
-    request_with_retry,
 )
 from app.scraping.normalizer import normalize_record
 from bs4 import BeautifulSoup
+import requests
 import re
 import json
+
+
+# Supprimer le warning urllib3 pour les requêtes verify=False
+# vers www.anapec.org (certificat GoGetSSL non reconnu)
+warnings.filterwarnings(
+    "ignore",
+    message="Unverified HTTPS request is being made",
+    category=requests.packages.urllib3.exceptions.InsecureRequestWarning,
+)
 
 # ── Constantes ─────────────────────────────────────────────────
 BASE_URL = "https://anapec.ma"
@@ -35,13 +45,88 @@ API_URL_TEMPLATE = (
     "/page:{page}/tout:all/language:fr"
 )
 DETAIL_URL_TEMPLATE = (
-    "http://www.anapec.org"
+    "https://www.anapec.org"
     "/sigec-app-rv/fr/entreprises/bloc_offre_home/{offer_id}/display"
 )
 SOURCE_NAME = "ANAPEC"
 SOURCE_TYPE = "Organisme public"
 CATEGORY_NAME = "Offres d'emploi"
 MAX_PAGES = 1000  # sécurité
+
+
+# Le certificat SSL présenté par www.anapec.org n'est pas reconnu
+# par le bundle certifi de Python (GoGetSSL).
+# Le site est néanmoins légitime et utilisé officiellement par l'ANAPEC.
+# La désactivation de la vérification SSL est limitée exclusivement
+# à ce domaine afin de permettre le scraping.
+_ANAPEC_ORG_DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/137.0.0.0 Safari/537.36"
+    ),
+}
+
+
+def _anapec_request_with_retry(
+    url: str,
+    headers: dict | None = None,
+    retries: int = 3,
+    timeout: int = 10,
+) -> requests.Response:
+    """Requête HTTP vers www.anapec.org avec vérification SSL désactivée.
+
+    Même comportement que request_with_retry() du module utils,
+    mais avec verify=False pour contourner le certificat GoGetSSL
+    non reconnu par le bundle certifi de Python.
+
+    Args:
+        url: URL de la requête.
+        headers: En-têtes HTTP supplémentaires.
+        retries: Nombre de tentatives.
+        timeout: Délai d'attente en secondes.
+
+    Returns:
+        Objet Response de requests.
+
+    Raises:
+        requests.RequestException: si toutes les tentatives échouent.
+    """
+    merged_headers = dict(_ANAPEC_ORG_DEFAULT_HEADERS)
+    if headers:
+        merged_headers.update(headers)
+
+    for attempt in range(retries):
+        try:
+            response = requests.get(
+                url, headers=merged_headers, timeout=timeout, verify=False,
+            )
+            response.raise_for_status()
+            return response
+        except requests.RequestException as e:
+            log_scraping_error(
+                "anapec_emploi_ssl",
+                f"Tentative {attempt + 1}/{retries} pour {url}: {e}",
+            )
+            if attempt == retries - 1:
+                raise
+            sleep_random(1, 2)
+
+
+def _anapec_get_soup(url: str, headers: dict | None = None) -> BeautifulSoup:
+    """Télécharge une page depuis www.anapec.org et retourne son BeautifulSoup.
+
+    Utilise _anapec_request_with_retry() en interne (verify=False).
+
+    Args:
+        url: URL de la page à télécharger.
+        headers: En-têtes HTTP supplémentaires.
+
+    Returns:
+        Objet BeautifulSoup de la page.
+    """
+    response = _anapec_request_with_retry(url, headers=headers)
+    return BeautifulSoup(response.text, "html.parser")
 
 
 def _fetch_json_api(page: int) -> dict | None:
@@ -55,14 +140,9 @@ def _fetch_json_api(page: int) -> dict | None:
     """
     url = API_URL_TEMPLATE.format(page=page)
     try:
-        response = request_with_retry(
+        response = _anapec_request_with_retry(
             url,
             headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/137.0.0.0 Safari/537.36"
-                ),
                 "Accept": "application/json",
                 "Referer": START_URL,
             },
@@ -297,16 +377,7 @@ def fetch_detail(offer_id: str) -> BeautifulSoup | None:
     """
     url = DETAIL_URL_TEMPLATE.format(offer_id=offer_id)
     try:
-        return get_soup(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/137.0.0.0 Safari/537.36"
-                ),
-            },
-        )
+        return _anapec_get_soup(url)
     except Exception as e:
         log_scraping_error(f"anapec_emploi_detail_{offer_id}", str(e))
         return None
