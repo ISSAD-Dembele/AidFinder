@@ -1,4 +1,4 @@
-from app.scraping.sources.anapec import scrape_news
+from app.scraping.sources.anapec import scrape_news, scrape_emploi
 from app.scraping.storage import save_records
 from app.database.database import SessionLocal
 from app.models.scraping_logs import ScrapingLog
@@ -8,6 +8,7 @@ from app.core.datetime_utils import utc_now
 
 SCRAPERS = [
     scrape_news,
+    scrape_emploi,
 ]
 
 
