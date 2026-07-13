@@ -1,65 +1,46 @@
 """
 Scraper des offres d'emploi ANAPEC.
 
-Récupère toutes les offres d'emploi depuis l'API JSON de www.anapec.org,
-puis enrichit chaque offre avec les détails complets depuis la page d'annonce.
+Point d'entrée exclusif : https://anapec.ma/chercheurs/offres
 
-Utilise le pipeline de scraping existant :
-    - utils.py : requêtes HTTP, BeautifulSoup, nettoyage
-    - normalizer.py : normalisation des champs et génération content_hash
-    - storage.py : sauvegarde en base de données
-    - manager.py : orchestration et logging
-    - scheduler.py : exécution périodique
+Fonctionnement :
+  - Le site utilise Laravel Livewire 3 pour rendre les offres.
+  - La page HTML contient un attribut wire:snapshot avec un JSON
+    qui embarque la première page d'offres (15 offres) ainsi que
+    les informations de pagination (total pages, page suivante).
+  - Les pages suivantes sont récupérées via des requêtes POST
+    vers /livewire/message/pages::chercheurs.offres.
+  - Les informations de détail d'une offre (description, contrat,
+    etc.) sont accessibles via des appels internes depuis anapec.ma.
+  - Le point d'entrée unique et exclusif est https://anapec.ma.
 
-Architecture calquée sur news.py.
+Architecture calquée sur news.py, compatible avec manager.py,
+scheduler.py, storage.py, normalizer.py, utils.py et BaseScraper.
 """
 
-import warnings
 from app.scraping.utils import (
-    clean_text,
-    extract_absolute_url,
     sleep_random, log_scraping_error,
 )
 from app.scraping.normalizer import normalize_record
-from bs4 import BeautifulSoup
 import requests
 import re
 import json
+import html as html_module
 
-
-# Supprimer le warning urllib3 pour les requêtes verify=False
-# vers www.anapec.org (certificat GoGetSSL non reconnu)
-warnings.filterwarnings(
-    "ignore",
-    message="Unverified HTTPS request is being made",
-    category=requests.packages.urllib3.exceptions.InsecureRequestWarning,
-)
 
 # ── Constantes ─────────────────────────────────────────────────
 BASE_URL = "https://anapec.ma"
-API_BASE_URL = "https://www.anapec.org"
 START_URL = "https://anapec.ma/chercheurs/offres"
-API_URL_TEMPLATE = (
-    "https://www.anapec.org"
-    "/sigec-app-rv/chercheurs/resultat_recherche_json"
-    "/page:{page}/tout:all/language:fr"
-)
-DETAIL_URL_TEMPLATE = (
-    "https://www.anapec.org"
-    "/sigec-app-rv/fr/entreprises/bloc_offre_home/{offer_id}/display"
-)
+LIVEWIRE_ENDPOINT = "https://anapec.ma/livewire/message/pages::chercheurs.offres"
 SOURCE_NAME = "ANAPEC"
 SOURCE_TYPE = "Organisme public"
 CATEGORY_NAME = "Offres d'emploi"
 MAX_PAGES = 1000  # sécurité
+# Nombre d'offres par page (observé dans le snapshot Livewire)
+OFFERS_PER_PAGE = 15
 
 
-# Le certificat SSL présenté par www.anapec.org n'est pas reconnu
-# par le bundle certifi de Python (GoGetSSL).
-# Le site est néanmoins légitime et utilisé officiellement par l'ANAPEC.
-# La désactivation de la vérification SSL est limitée exclusivement
-# à ce domaine afin de permettre le scraping.
-_ANAPEC_ORG_DEFAULT_HEADERS = {
+_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -68,143 +49,175 @@ _ANAPEC_ORG_DEFAULT_HEADERS = {
 }
 
 
-def _anapec_request_with_retry(
-    url: str,
-    headers: dict | None = None,
-    retries: int = 3,
-    timeout: int = 10,
-) -> requests.Response:
-    """Requête HTTP vers www.anapec.org avec vérification SSL désactivée.
-
-    Même comportement que request_with_retry() du module utils,
-    mais avec verify=False pour contourner le certificat GoGetSSL
-    non reconnu par le bundle certifi de Python.
+def _extract_wire_snapshot(html_text: str) -> dict | None:
+    """Extrait le wire:snapshot du composant pages::chercheurs.offres.
 
     Args:
-        url: URL de la requête.
-        headers: En-têtes HTTP supplémentaires.
-        retries: Nombre de tentatives.
-        timeout: Délai d'attente en secondes.
+        html_text: HTML complet de la page.
 
     Returns:
-        Objet Response de requests.
-
-    Raises:
-        requests.RequestException: si toutes les tentatives échouent.
+        Le dictionnaire JSON du snapshot, ou None si non trouvé.
     """
-    merged_headers = dict(_ANAPEC_ORG_DEFAULT_HEADERS)
-    if headers:
-        merged_headers.update(headers)
+    # Chercher le snapshot qui contient le composant offres
+    pattern = r'wire:snapshot="([^"]+)"'
+    matches = re.findall(pattern, html_text)
 
-    for attempt in range(retries):
+    for raw_snap in matches:
+        decoded = html_module.unescape(raw_snap)
         try:
-            response = requests.get(
-                url, headers=merged_headers, timeout=timeout, verify=False,
-            )
-            response.raise_for_status()
-            return response
-        except requests.RequestException as e:
-            log_scraping_error(
-                "anapec_emploi_ssl",
-                f"Tentative {attempt + 1}/{retries} pour {url}: {e}",
-            )
-            if attempt == retries - 1:
-                raise
-            sleep_random(1, 2)
+            data = json.loads(decoded)
+            if data.get("memo", {}).get("name") == "pages::chercheurs.offres":
+                return data
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    return None
 
 
-def _anapec_get_soup(url: str, headers: dict | None = None) -> BeautifulSoup:
-    """Télécharge une page depuis www.anapec.org et retourne son BeautifulSoup.
+def _extract_offers_from_snapshot(snapshot: dict) -> list[dict]:
+    """Extrait la liste des offres depuis le snapshot Livewire.
 
-    Utilise _anapec_request_with_retry() en interne (verify=False).
-
-    Args:
-        url: URL de la page à télécharger.
-        headers: En-têtes HTTP supplémentaires.
-
-    Returns:
-        Objet BeautifulSoup de la page.
-    """
-    response = _anapec_request_with_retry(url, headers=headers)
-    return BeautifulSoup(response.text, "html.parser")
-
-
-def _fetch_json_api(page: int) -> dict | None:
-    """Récupère les résultats d'une page via l'API JSON.
-
-    Args:
-        page: Numéro de la page à récupérer (1-indexé).
-
-    Returns:
-        Le dictionnaire JSON parsé, ou None en cas d'échec.
-    """
-    url = API_URL_TEMPLATE.format(page=page)
-    try:
-        response = _anapec_request_with_retry(
-            url,
-            headers={
-                "Accept": "application/json",
-                "Referer": START_URL,
-            },
-        )
-        return response.json()
-    except Exception as e:
-        log_scraping_error(f"anapec_emploi_api_page_{page}", str(e))
-        return None
-
-
-def _extract_pagination_info(data: dict | None) -> dict:
-    """Extrait les informations de pagination depuis la réponse JSON.
-
-    Args:
-        data: Données JSON parsées.
-
-    Returns:
-        Dictionnaire avec 'current_page', 'total_pages', 'total_offers'.
-    """
-    info = {"current_page": 1, "total_pages": 1, "total_offers": 0}
-
-    if not data or not isinstance(data, dict):
-        return info
-
-    paginate = data.get("paginate")
-    if not paginate or not isinstance(paginate, dict):
-        return info
-
-    info["total_offers"] = int(paginate.get("count", 0))
-
-    last_url = paginate.get("last", "")
-    if last_url:
-        match = re.search(r"page:(\d+)", last_url)
-        if match:
-            info["total_pages"] = int(match.group(1))
-
-    return info
-
-
-def _extract_offers_from_api(data: dict | None) -> list[dict]:
-    """Extrait la liste des offres depuis la réponse JSON de l'API.
-
-    L'API renvoie les offres dans une liste sous la clé 'Offre'.
-    Chaque offre est un dict avec les clés :
+    Les offres se trouvent dans data.latestOffers[0].
+    Chaque offre contient les clés :
         id, ref_offre, date_offre, intitule_poste, entreprise, lieu_travail
 
     Args:
-        data: Données JSON parsées.
+        snapshot: Dictionnaire du snapshot Livewire.
 
     Returns:
         Liste des dictionnaires d'offres.
     """
-    if not data or not isinstance(data, dict):
-        return []
+    latest_offers = snapshot.get("data", {}).get("latestOffers", [])
+    if isinstance(latest_offers, list) and len(latest_offers) > 0:
+        offers = latest_offers[0]
+        if isinstance(offers, list):
+            return offers
+    return []
 
-    # L'API renvoie les offres dans une liste sous la clé 'Offre'
-    offers = data.get("Offre", [])
 
-    if not isinstance(offers, list):
-        return []
+def _extract_pagination_info(snapshot: dict) -> dict:
+    """Extrait les informations de pagination depuis le snapshot.
 
-    return offers
+    Les infos se trouvent dans data.paginate[0].
+    Contient : count (total offres), last (dernière page), next (page suivante).
+
+    Args:
+        snapshot: Dictionnaire du snapshot Livewire.
+
+    Returns:
+        Dictionnaire avec total_offers et total_pages.
+    """
+    info = {"total_offers": 0, "total_pages": 1}
+
+    paginate = snapshot.get("data", {}).get("paginate", [])
+    if isinstance(paginate, list) and len(paginate) > 0:
+        pag_data = paginate[0]
+        if isinstance(pag_data, dict):
+            count = pag_data.get("count", "0")
+            info["total_offers"] = int(count) if count else 0
+
+            last_url = pag_data.get("last", "")
+            if last_url:
+                match = re.search(r"page:(\d+)", str(last_url))
+                if match:
+                    info["total_pages"] = int(match.group(1))
+
+    return info
+
+
+def _extract_component_id(snapshot: dict) -> str | None:
+    """Extrait l'identifiant du composant Livewire depuis le snapshot.
+
+    Returns:
+        L'ID du composant, ou None si non trouvé.
+    """
+    return snapshot.get("memo", {}).get("id")
+
+
+def _extract_csrf_token(html_text: str) -> str | None:
+    """Extrait le token CSRF depuis la page HTML.
+
+    Args:
+        html_text: HTML complet de la page.
+
+    Returns:
+        Le token CSRF, ou None si non trouvé.
+    """
+    match = re.search(
+        r'<meta\s+name="csrf-token"\s+content="([^"]+)"',
+        html_text,
+        re.IGNORECASE,
+    )
+    return match.group(1) if match else None
+
+
+def _fetch_page(
+    page: int,
+    csrf_token: str,
+    cookies: dict,
+    component_id: str,
+    fingerprint: dict,
+) -> dict | None:
+    """Récupère une page d'offres via l'API Livewire.
+
+    Args:
+        page: Numéro de la page à récupérer.
+        csrf_token: Token CSRF.
+        cookies: Cookies de session.
+        component_id: ID du composant Livewire.
+        fingerprint: Fingerprint du composant (sans l'ID).
+
+    Returns:
+        La réponse JSON du Livewire, ou None en cas d'échec.
+    """
+    headers = {
+        "User-Agent": _HEADERS["User-Agent"],
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Livewire": "true",
+        "X-CSRF-TOKEN": csrf_token,
+        "Referer": START_URL,
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+    livewire_fingerprint = {
+        "id": component_id,
+        "name": fingerprint.get("name", "pages::chercheurs.offres"),
+        "path": fingerprint.get("path", "chercheurs/offres"),
+        "method": "GET",
+    }
+
+    payload = {
+        "fingerprint": livewire_fingerprint,
+        "serverMemo": {
+            "children": [],
+            "errors": [],
+            "htmlHash": "",
+            "data": [],
+            "dataMeta": [],
+            "checksum": fingerprint.get("checksum", ""),
+        },
+        "updates": [
+            {
+                "type": "callMethod",
+                "payload": {"method": "gotoPage", "params": [page]},
+            }
+        ],
+    }
+
+    try:
+        response = requests.post(
+            LIVEWIRE_ENDPOINT,
+            json=payload,
+            headers=headers,
+            cookies=cookies,
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        log_scraping_error(f"anapec_emploi_livewire_page_{page}", str(e))
+        return None
 
 
 def fetch_total_pages() -> int:
@@ -213,314 +226,133 @@ def fetch_total_pages() -> int:
     Returns:
         Nombre total de pages (au moins 1).
     """
-    data = _fetch_json_api(1)
-    info = _extract_pagination_info(data)
-    print(f"[ANAPEC-EMPLOI] Total offres : {info['total_offers']}, "
-          f"pages : {info['total_pages']}")
-    return info["total_pages"]
+    try:
+        response = requests.get(START_URL, headers=_HEADERS, timeout=15)
+        response.raise_for_status()
+        snapshot = _extract_wire_snapshot(response.text)
+        if not snapshot:
+            print("[ANAPEC-EMPLOI] Impossible d'extraire le snapshot Livewire.")
+            return 1
+        info = _extract_pagination_info(snapshot)
+        print(f"[ANAPEC-EMPLOI] Total offres : {info['total_offers']}, "
+              f"pages : {info['total_pages']}")
+        return info["total_pages"]
+    except Exception as e:
+        log_scraping_error("anapec_emploi_total_pages", str(e))
+        return 1
 
 
 def fetch_listings() -> list[dict]:
-    """Récupère toutes les offres d'emploi via l'API paginée.
+    """Récupère toutes les offres d'emploi via Livewire.
 
-    Parcourt toutes les pages de l'API JSON et agrège les résultats.
+    1. Télécharge la page initiale (page 1, déjà dans le snapshot).
+    2. Extrait les infos de pagination.
+    3. Parcourt les pages suivantes via des requêtes POST Livewire.
 
     Returns:
         Liste des dictionnaires bruts d'offres (infos de base).
     """
     all_offers: list[dict] = []
-    page = 1
 
-    # Récupérer la page 1 qui contient aussi les infos de pagination
-    data = _fetch_json_api(page)
-    if not data:
-        print("[ANAPEC-EMPLOI] Aucune donnée reçue de l'API.")
+    # ── 1. Page initiale ──────────────────────────────────────
+    print(f"[ANAPEC-EMPLOI] Téléchargement de {START_URL}")
+    try:
+        response = requests.get(START_URL, headers=_HEADERS, timeout=15)
+        response.raise_for_status()
+        html_text = response.text
+        cookies = response.cookies
+    except Exception as e:
+        log_scraping_error("anapec_emploi_init", str(e))
+        print(f"[ANAPEC-EMPLOI] Erreur accès à {START_URL}: {e}")
         return all_offers
 
-    info = _extract_pagination_info(data)
+    # Extraire le snapshot
+    snapshot = _extract_wire_snapshot(html_text)
+    if not snapshot:
+        print("[ANAPEC-EMPLOI] Aucun snapshot Livewire trouvé.")
+        return all_offers
+
+    # Extraire les offres de la page 1
+    page_offers = _extract_offers_from_snapshot(snapshot)
+    all_offers.extend(page_offers)
+    print(f"[ANAPEC-EMPLOI] Page 1 : {len(page_offers)} offres")
+
+    # Infos de pagination
+    info = _extract_pagination_info(snapshot)
     total_pages = info["total_pages"]
     print(f"[ANAPEC-EMPLOI] Pages totales : {total_pages}")
 
-    # Extraire les offres de la page 1
-    page_offers = _extract_offers_from_api(data)
-    all_offers.extend(page_offers)
-    print(f"[ANAPEC-EMPLOI] Page {page} : {len(page_offers)} offres")
+    # Extraire le CSRF token
+    csrf_token = _extract_csrf_token(html_text)
+    if not csrf_token:
+        print("[ANAPEC-EMPLOI] Aucun token CSRF trouvé.")
+        return all_offers
 
-    # Parcourir les pages suivantes
+    # Extraire l'ID du composant et le fingerprint
+    component_id = _extract_component_id(snapshot)
+    if not component_id:
+        print("[ANAPEC-EMPLOI] Aucun ID de composant trouvé.")
+        return all_offers
+
+    # Préparer le fingerprint de base
+    fingerprint = snapshot.get("memo", {})
+
+    # ── 2. Pages suivantes ────────────────────────────────────
+    page = 1
     while page < total_pages and page < MAX_PAGES:
         page += 1
-        sleep_random(1, 2)
+        sleep_random(2, 4)
 
-        data = _fetch_json_api(page)
-        if not data:
+        print(f"[ANAPEC-EMPLOI] Page {page}/{total_pages}...")
+        livewire_data = _fetch_page(
+            page, csrf_token, cookies, component_id, fingerprint
+        )
+
+        if not livewire_data:
             print(f"[ANAPEC-EMPLOI] Échec page {page}, arrêt.")
             break
 
-        page_offers = _extract_offers_from_api(data)
-        if not page_offers:
-            print(f"[ANAPEC-EMPLOI] Page {page} vide, arrêt.")
-            break
+        # La réponse Livewire contient un nouveau snapshot
+        new_snapshot = livewire_data.get("components", [{}])[0].get("snapshot", "")
+        if new_snapshot:
+            try:
+                new_data = json.loads(html_module.unescape(new_snapshot))
+                page_offers = _extract_offers_from_snapshot(new_data)
+                if not page_offers:
+                    print(f"[ANAPEC-EMPLOI] Page {page} vide, arrêt.")
+                    break
+                all_offers.extend(page_offers)
+                print(f"[ANAPEC-EMPLOI] Page {page} : {len(page_offers)} offres "
+                      f"(total : {len(all_offers)})")
 
-        all_offers.extend(page_offers)
-        print(f"[ANAPEC-EMPLOI] Page {page} : {len(page_offers)} offres "
-              f"(total : {len(all_offers)})")
+                # Mettre à jour l'ID du composant (peut changer)
+                new_id = _extract_component_id(new_data)
+                if new_id:
+                    component_id = new_id
+
+                # Mise à jour du checksum
+                new_checksum = new_data.get("checksum")
+                if new_checksum:
+                    fingerprint["checksum"] = new_checksum
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                print(f"[ANAPEC-EMPLOI] Erreur parsing page {page}: {e}")
+                break
+        else:
+            print(f"[ANAPEC-EMPLOI] Réponse Livewire vide pour page {page}, arrêt.")
+            break
 
     print(f"[ANAPEC-EMPLOI] Total offres récupérées : {len(all_offers)}")
     return all_offers
 
 
-def _extract_detail_field(
-    soup: BeautifulSoup,
-    label: str,
-) -> str | None:
-    """Extrait un champ depuis la page détail d'une offre.
-
-    Cherche un texte contenant le label (ex: 'Type de contrat :')
-    puis retourne la valeur qui suit.
-
-    Args:
-        soup: Objet BeautifulSoup de la page détail.
-        label: Le texte du label à chercher (ex: 'Type de contrat').
-
-    Returns:
-        La valeur extraite, ou None si non trouvée.
-    """
-    # Stratégie : chercher dans tout le texte du body
-    body = soup.find("body")
-    if not body:
-        return None
-
-    text = body.get_text(separator="\n")
-
-    # Chercher le label dans le texte
-    for line in text.split("\n"):
-        line_clean = line.strip()
-        if label.lower() in line_clean.lower():
-            # Retourner tout après le label
-            parts = line_clean.split(":", 1)
-            if len(parts) > 1:
-                value = parts[1].strip()
-                if value and len(value) < 500:
-                    return value
-            # Sinon regarder la ligne suivante
-            return None
-
-    return None
-
-
-def _extract_section_text(
-    soup: BeautifulSoup,
-    section_title: str,
-) -> str | None:
-    """Extrait le texte d'une section thématique.
-
-    Cherche un titre de section (ex: 'Description de Poste')
-    et retourne le texte jusqu'à la prochaine section.
-
-    Args:
-        soup: Objet BeautifulSoup de la page détail.
-        section_title: Titre de la section à trouver.
-
-    Returns:
-        Texte de la section, ou None si non trouvée.
-    """
-    body = soup.find("body")
-    if not body:
-        return None
-
-    text = body.get_text(separator="\n")
-    lines = text.split("\n")
-    lines_clean = [l.strip() for l in lines if l.strip()]
-
-    in_section = False
-    section_lines = []
-    section_keywords = [
-        "description", "profil", "missions", "compétences",
-        "commentaire", "poste", "formation", "expérience",
-    ]
-
-    for line in lines_clean:
-        if section_title.lower() in line.lower():
-            in_section = True
-            continue
-
-        if in_section:
-            # Détecter si on arrive à une nouvelle section
-            is_new_section = False
-            for kw in section_keywords:
-                if (
-                    line.lower().startswith(kw.lower())
-                    and line.lower() != section_title.lower()
-                ):
-                    is_new_section = True
-                    break
-
-            if is_new_section and len(section_lines) > 2:
-                break
-
-            section_lines.append(line)
-
-    if section_lines:
-        return " ".join(section_lines)
-
-    return None
-
-
-def fetch_detail(offer_id: str) -> BeautifulSoup | None:
-    """Récupère la page détail d'une offre.
-
-    Args:
-        offer_id: Identifiant numérique de l'offre.
-
-    Returns:
-        Objet BeautifulSoup de la page, ou None en cas d'échec.
-    """
-    url = DETAIL_URL_TEMPLATE.format(offer_id=offer_id)
-    try:
-        return _anapec_get_soup(url)
-    except Exception as e:
-        log_scraping_error(f"anapec_emploi_detail_{offer_id}", str(e))
-        return None
-
-
-def parse_detail(soup: BeautifulSoup) -> dict:
-    """Parse la page détail pour extraire tous les champs disponibles.
-
-    Args:
-        soup: Objet BeautifulSoup de la page détail.
-
-    Returns:
-        Dictionnaire avec les champs extraits.
-    """
-    if not soup:
-        return {}
-
-    body = soup.find("body")
-    if not body:
-        return {}
-
-    full_text = body.get_text(separator="\n", strip=True)
-    lines = [l.strip() for l in full_text.split("\n") if l.strip()]
-
-    detail = {}
-
-    # ── Informations structurées ──────────────────────────────
-    # Référence
-    ref_match = re.search(
-        r"Référence de l'offre:\s*(\S+)", full_text, re.IGNORECASE
-    )
-    if ref_match:
-        detail["reference"] = ref_match.group(1)
-
-    # Date de publication
-    date_match = re.search(r"Date\s*:\s*(\d{2}/\d{2}/\d{4})", full_text)
-    if date_match:
-        detail["date_offre"] = date_match.group(1)
-
-    # Agence
-    agence_match = re.search(r"Agence\s*:\s*(.+)", full_text)
-    if agence_match:
-        detail["agence"] = agence_match.group(1).strip()
-
-    # Secteur d'activité
-    secteur_match = re.search(
-        r"Secteur d'activité\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if secteur_match:
-        detail["secteur_activite"] = secteur_match.group(1).strip()
-
-    # Type de contrat
-    contrat_match = re.search(
-        r"Type de contrat\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if contrat_match:
-        detail["type_contrat"] = contrat_match.group(1).strip()
-
-    # Date de début
-    debut_match = re.search(
-        r"Date de début\s*:\s*(\d{2}/\d{2}/\d{4})", full_text, re.IGNORECASE
-    )
-    if debut_match:
-        detail["date_debut"] = debut_match.group(1)
-
-    # Lieu de travail
-    lieu_match = re.search(
-        r"Lieu de travail\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if lieu_match:
-        detail["lieu_travail"] = lieu_match.group(1).strip()
-
-    # Formation
-    formation_match = re.search(
-        r"Formation\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if formation_match:
-        detail["formation"] = formation_match.group(1).strip()
-
-    # Expérience
-    exp_match = re.search(
-        r"Expérience professionnelle\s*:\s*(.+)",
-        full_text,
-        re.IGNORECASE,
-    )
-    if exp_match:
-        detail["experience"] = exp_match.group(1).strip()
-
-    # Poste
-    poste_match = re.search(
-        r"Poste\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if poste_match:
-        detail["poste"] = poste_match.group(1).strip()
-
-    # Langues
-    langues_match = re.search(
-        r"Langues\s*:\s*(.+)", full_text, re.IGNORECASE
-    )
-    if langues_match:
-        detail["langues"] = langues_match.group(1).strip()
-
-    # ── Sections textuelles ───────────────────────────────────
-    # Description de l'entreprise
-    desc_ent = _extract_section_text(soup, "Description de l'entreprise")
-    if not desc_ent:
-        desc_ent = _extract_section_text(soup, "Description de l’entreprise")
-    if desc_ent:
-        detail["description_entreprise"] = desc_ent
-
-    # Description du poste
-    desc_poste = _extract_section_text(soup, "Description de Poste")
-    if desc_poste:
-        detail["description_poste"] = desc_poste
-
-    # Caractéristiques du poste / missions
-    carac_poste = _extract_section_text(soup, "Caractéristiques du poste")
-    if carac_poste:
-        detail["missions"] = carac_poste
-
-    # Profil recherché
-    profil = _extract_section_text(soup, "Profil recherché")
-    if profil:
-        detail["profil_recherche"] = profil
-
-    # Description du profil
-    desc_profil = _extract_section_text(soup, "Description du profil")
-    if desc_profil:
-        detail["description_profil"] = desc_profil
-
-    # Commentaire
-    commentaire = _extract_section_text(soup, "Commentaire")
-    if commentaire:
-        detail["commentaire"] = commentaire
-
-    return detail
-
-
 def parse_listing(offer_data: dict) -> dict | None:
-    """Convertit une offre brute de l'API en enregistrement normalisé.
+    """Convertit une offre brute du snapshot en enregistrement normalisé.
+
+    Les offres depuis le snapshot Livewire contiennent les champs :
+        id, ref_offre, date_offre, intitule_poste, entreprise, lieu_travail
 
     Args:
-        offer_data: Dictionnaire brut d'une offre depuis l'API.
+        offer_data: Dictionnaire brut d'une offre depuis le snapshot.
 
     Returns:
         Enregistrement normalisé prêt pour la sauvegarde,
@@ -531,7 +363,7 @@ def parse_listing(offer_data: dict) -> dict | None:
 
     offer_id = offer_data.get("id")
     titre = offer_data.get("intitule_poste")
-    lieu = offer_data.get("lieu_travail", "").strip()
+    lieu = (offer_data.get("lieu_travail") or "").strip()
     reference = offer_data.get("ref_offre")
     entreprise = offer_data.get("entreprise")
     date_offre = offer_data.get("date_offre")
@@ -539,22 +371,23 @@ def parse_listing(offer_data: dict) -> dict | None:
     if not offer_id or not titre:
         return None
 
-    # URL officielle
-    url_officielle = DETAIL_URL_TEMPLATE.format(offer_id=offer_id)
+    # URL officielle (point d'entrée anapec.ma)
+    url_officielle = f"{BASE_URL}/chercheurs/offres"
 
     # Construire la description à partir du titre et du lieu
     description = f"{titre}"
     if lieu:
         description += f" - {lieu}"
-    if entreprise and entreprise != "-":
-        description += f" - {entreprise}"
+    if entreprise and entreprise not in ("-", "", None):
+        # Si entreprise ressemble à une URL (logo), on la nettoie
+        if not entreprise.startswith("http"):
+            description += f" - {entreprise}"
 
-    # Récupérer les détails complets
-    print(f"   -> Détail offre {offer_id}...")
-    soup = fetch_detail(offer_id)
-    detail = parse_detail(soup) if soup else {}
+    # Pour les détails complets, on utilise l'ID comme référence
+    # Les informations détaillées (type_contrat, formation, etc.)
+    # ne sont pas disponibles directement depuis anapec.ma.
+    # On utilise les données de base du snapshot.
 
-    # Fusionner les données
     data = {
         "source_nom": SOURCE_NAME,
         "source_url": BASE_URL,
@@ -566,35 +399,21 @@ def parse_listing(offer_data: dict) -> dict | None:
             "via l'ANAPEC."
         ),
         "titre": titre,
-        "description": detail.get("description_poste")
-        or detail.get("missions")
-        or description,
-        "date_limite": None,  # Pas de date limite explicite
+        "description": description,
+        "date_limite": None,
         "type_aide": "Offre d'emploi",
         "montant": None,
         "age_min": None,
         "age_max": None,
         "region_cible": lieu or "Maroc",
-        "niveau_etude_requis": detail.get("formation"),
+        "niveau_etude_requis": None,
         "statut_socio_pro_requis": None,
         "handicap_requis": False,
         "url_officielle": url_officielle,
         "image_url": None,
-        # Champs supplémentaires (conservés dans normalize_record
-        # mais accessibles pour le normalizer)
+        # Champs supplémentaires
         "reference_offre": reference,
-        "entreprise_nom": entreprise if entreprise != "-" else None,
-        "secteur_activite": detail.get("secteur_activite"),
-        "type_contrat": detail.get("type_contrat"),
-        "experience_requise": detail.get("experience"),
-        "formation_requise": detail.get("formation"),
-        "langues_requises": detail.get("langues"),
-        "missions": detail.get("missions"),
-        "profil_recherche": detail.get("profil_recherche")
-        or detail.get("description_profil"),
-        "description_entreprise": detail.get("description_entreprise"),
-        "commentaire": detail.get("commentaire"),
-        "agence": detail.get("agence"),
+        "entreprise_nom": entreprise if entreprise and entreprise != "-" else None,
         "date_publication": date_offre,
         "lieu_travail": lieu,
     }
@@ -605,6 +424,7 @@ def parse_listing(offer_data: dict) -> dict | None:
 def scrape_emploi():
     """Lance le scraping complet des offres d'emploi ANAPEC.
 
+    Point d'entrée exclusif : https://anapec.ma/chercheurs/offres.
     Fonction principale appelée par le manager.
     Suit le même schéma que scrape_news().
 
@@ -615,22 +435,22 @@ def scrape_emploi():
     records = []
 
     try:
-        # 1. Récupérer toutes les offres via l'API paginée
+        # 1. Récupérer toutes les offres via Livewire
         offers = fetch_listings()
         print(f"[ANAPEC-EMPLOI] {len(offers)} offres à traiter")
 
-        # 2. Pour chaque offre, récupérer les détails et normaliser
+        # 2. Pour chaque offre, normaliser
         for i, offer in enumerate(offers, 1):
             print(f"[ANAPEC-EMPLOI] Traitement offre {i}/{len(offers)}")
             record = parse_listing(offer)
             if record:
                 records.append(record)
 
-            # Pause entre chaque détail pour éviter la surcharge
-            if i % 5 == 0:
-                sleep_random(2, 4)
+            # Pause pour éviter la surcharge
+            if i % 10 == 0:
+                sleep_random(2, 3)
             else:
-                sleep_random(1, 2)
+                sleep_random(0.5, 1.5)
 
     except Exception as e:
         log_scraping_error("anapec_emploi", str(e))
