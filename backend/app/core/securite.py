@@ -5,11 +5,12 @@ from passlib.context import CryptContext #gestionnaire de hashage de mot de pass
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import(SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES)
-from app.core.statuts_compte import est_desactive_par_utilisateur, est_suspendu_par_admin
+from app.core.statuts_compte import est_suspendu
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models.utilisateurs import Utilisateur
 from app.database.session import get_db
+from app.services.admin_service import reactivate_expired_suspension
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -58,16 +59,12 @@ def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(g
             detail="Utilisateur non trouvé."
         )
 
-    # Bloque l'accès aux routes protégées si le compte n'est plus actif
-    if est_suspendu_par_admin(user.statut_compte):
+    reactivate_expired_suspension(db, user)
+
+    if est_suspendu(user.statut_compte):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Votre compte a été suspendu par un administrateur."
-        )
-    if est_desactive_par_utilisateur(user.statut_compte):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ce compte est désactivé."
+            detail="Votre compte est suspendu jusqu'à la date de réactivation prévue."
         )
 
     return user

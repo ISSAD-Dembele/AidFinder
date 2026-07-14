@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 import os, threading
 from app.scraping.scheduler import start_scheduler
 from app.database.database import Base, engine
+from app.database.session import SessionLocal
+from app.services.admin_service import reactivate_expired_suspensions
 from sqlalchemy import text
 
 app = FastAPI()
@@ -40,6 +42,7 @@ def home():
 def startup_event():
     ensure_database_schema()
     threading.Thread(target=start_scheduler, daemon=True).start()
+    threading.Thread(target=monitor_expired_suspensions, daemon=True).start()
 
 
 def ensure_database_schema():
@@ -54,12 +57,23 @@ def ensure_runtime_columns():
         "ALTER TABLE aides ADD COLUMN IF NOT EXISTS est_active BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville VARCHAR",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_derniere_connexion TIMESTAMP NULL",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nombre_avertissements INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_fin_suspension TIMESTAMPTZ NULL",
         "ALTER TABLE historiques ADD COLUMN IF NOT EXISTS conversation_meta TEXT",
+        "ALTER TABLE actions_moderations ADD COLUMN IF NOT EXISTS message_conversation TEXT",
+        "UPDATE utilisateurs SET statut_compte = 'actif' WHERE statut_compte IN ('desactive', 'desactive_utilisateur')",
+        """
+        UPDATE utilisateurs
+        SET statut_compte = 'suspendu',
+            date_fin_suspension = COALESCE(date_fin_suspension, date_desactivation + INTERVAL '15 days', NOW())
+        WHERE statut_compte = 'suspendu_admin'
+        """,
     )
     utc_datetime_columns = (
         ("utilisateurs", "date_creation"),
         ("utilisateurs", "date_derniere_connexion"),
         ("utilisateurs", "date_desactivation"),
+        ("utilisateurs", "date_fin_suspension"),
         ("historiques", "date_creation"),
         ("historiques", "date_derniere_activite"),
         ("discussions", "date_creation"),
@@ -98,3 +112,13 @@ def ensure_runtime_columns():
                         f"TYPE TIMESTAMPTZ USING {column_name} AT TIME ZONE 'UTC'"
                     )
                 )
+
+
+def monitor_expired_suspensions():
+    while True:
+        db = SessionLocal()
+        try:
+            reactivate_expired_suspensions(db)
+        finally:
+            db.close()
+        threading.Event().wait(1)

@@ -22,6 +22,7 @@ class AdminUserResponse(BaseModel):
     email: EmailStr
     role: str
     statut_compte: str
+    nombre_avertissements: int
     date_naissance: date | None = None
     ville: str | None = None
     region: str | None = None
@@ -32,25 +33,31 @@ class AdminUserResponse(BaseModel):
     date_creation: datetime | None = None
     date_derniere_connexion: datetime | None = None
     date_desactivation: datetime | None = None
+    date_fin_suspension: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_serializer("date_creation", "date_derniere_connexion", "date_desactivation")
+    @field_serializer("date_creation", "date_derniere_connexion", "date_desactivation", "date_fin_suspension")
     def serialize_datetime(self, value: datetime | None):
         return as_utc(value)
 
 
-class AdminUserUpdate(BaseModel):
-    nom: str | None = None
-    email: EmailStr | None = None
-    role: str | None = None
-    statut_compte: str | None = None
-    date_naissance: date | None = None
-    ville: str | None = None
-    region: str | None = None
-    niveau_etude: str | None = None
-    statut_socio_pro: str | None = None
-    situation_handicap: bool | None = None
+class AdminWarningCreate(BaseModel):
+    motif: str
+    discussion_id: int
+
+
+class AdminWarningResponse(BaseModel):
+    action_id: int
+    motif: str
+    message_conversation: str | None = None
+    date_creation: datetime
+    nombre_avertissements: int
+    suspension_declenchee: bool
+
+    @field_serializer("date_creation")
+    def serialize_datetime(self, value: datetime):
+        return as_utc(value)
 
 
 class AdminAideBase(BaseModel):
@@ -74,25 +81,6 @@ class AdminAideBase(BaseModel):
 
 class AdminAideCreate(AdminAideBase):
     pass
-
-
-class AdminAideUpdate(BaseModel):
-    source_id: int | None = None
-    categorie_id: int | None = None
-    titre: str | None = None
-    description: str | None = None
-    date_limite: date | None = None
-    type_aide: str | None = None
-    montant: float | None = None
-    age_min: int | None = None
-    age_max: int | None = None
-    region_cible: str | None = None
-    niveau_etude_requis: str | None = None
-    statut_socio_pro_requis: str | None = None
-    handicap_requis: bool | None = None
-    url_officielle: str | None = None
-    image_url: str | None = None
-    est_active: bool | None = None
 
 
 class AdminAideResponse(AdminAideBase):

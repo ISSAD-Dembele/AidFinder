@@ -1,9 +1,23 @@
+import logging
+import smtplib
+from datetime import timedelta
+from email.message import EmailMessage
+
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import as_utc, utc_now
-from app.core.statuts_compte import ACTIF, DESACTIVE_UTILISATEUR, SUSPENDU_ADMIN
+from app.core.config import (
+    SMTP_FROM_EMAIL,
+    SMTP_HOST,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_USERNAME,
+    SMTP_USE_TLS,
+)
+from app.core.statuts_compte import ACTIF, SUSPENDU, est_suspendu
+from app.models.action_moderation import ActionModeration
 from app.models.aides import Aides
 from app.models.categorie_aide import CategorieAide
 from app.models.consultation_aide import ConsultationAide
@@ -13,12 +27,12 @@ from app.models.historique import Historique
 from app.models.scraping_logs import ScrapingLog
 from app.models.source_aide import SourceAide
 from app.models.utilisateurs import Utilisateur
-from app.schemas.admin import AdminAideCreate, AdminAideUpdate, AdminUserUpdate
+from app.schemas.admin import AdminAideCreate, AdminWarningCreate
 from app.scraping.manager import run_all_scrapers
 
 
-VALID_ROLES = {"utilisateur", "administrateur"}
-VALID_STATUSES = {ACTIF, DESACTIVE_UTILISATEUR, SUSPENDU_ADMIN}
+logger = logging.getLogger(__name__)
+SUSPENSION_DURATION = timedelta(days=15)
 
 
 def _get_user_or_404(db: Session, user_id: int) -> Utilisateur:
@@ -100,63 +114,210 @@ def get_user(db: Session, user_id: int) -> Utilisateur:
     return _get_user_or_404(db, user_id)
 
 
-def update_user(db: Session, user_id: int, data: AdminUserUpdate) -> Utilisateur:
-    user = _get_user_or_404(db, user_id)
-    values = data.model_dump(exclude_unset=True)
-    if values.get("role") and values["role"] not in VALID_ROLES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rôle invalide.")
-    if values.get("statut_compte") and values["statut_compte"] not in VALID_STATUSES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Statut de compte invalide.")
+def _send_email(recipient: str, subject: str, body: str) -> None:
+    if not SMTP_HOST:
+        logger.warning("Email non envoyé : SMTP_HOST n'est pas configuré.")
+        return
+
+    message = EmailMessage()
+    message["From"] = SMTP_FROM_EMAIL
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
     try:
-        for key, value in values.items():
-            setattr(user, key, value)
-        if values.get("statut_compte") == ACTIF:
-            user.date_desactivation = None
-        elif values.get("statut_compte") in {DESACTIVE_UTILISATEUR, SUSPENDU_ADMIN}:
-            user.date_desactivation = utc_now()
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            if SMTP_USE_TLS:
+                server.starttls()
+            if SMTP_USERNAME and SMTP_PASSWORD:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(message)
+    except (OSError, smtplib.SMTPException):
+        logger.exception("Échec de l'envoi de l'email de modération à %s.", recipient)
+
+
+def _send_warning_email(user: Utilisateur, motif: str, message_conversation: str) -> None:
+    if user.nombre_avertissements >= 2:
+        consequence = "Ce deuxième avertissement entraîne la suspension immédiate de votre compte."
+    else:
+        consequence = "Un nouvel avertissement entraînera la suspension de votre compte pendant 15 jours."
+    _send_email(
+        user.email,
+        "AidFinder — avertissement",
+        f"Bonjour {user.nom},\n\n"
+        f"Motif : {motif}\n"
+        f"Message concerné : {message_conversation}\n"
+        f"Nombre d'avertissements : {user.nombre_avertissements}\n\n"
+        "Nous vous rappelons que l'utilisation d'AidFinder doit respecter le règlement de la plateforme.\n"
+        f"{consequence}\n",
+    )
+
+
+def _send_suspension_email(user: Utilisateur, motif: str, suspension_date, reactivation_date) -> None:
+    _send_email(
+        user.email,
+        "AidFinder — compte suspendu",
+        f"Bonjour {user.nom},\n\n"
+        f"Motif : {motif}\n"
+        f"Date de suspension : {as_utc(suspension_date).isoformat()}\n"
+        "Durée : 15 jours.\n"
+        f"Date prévue de réactivation : {as_utc(reactivation_date).isoformat()}\n",
+    )
+
+
+def _send_reactivation_emails(user: Utilisateur, admin_email: str | None) -> None:
+    _send_email(
+        user.email,
+        "AidFinder — compte réactivé",
+        f"Bonjour {user.nom},\n\nVotre compte a été réactivé automatiquement à l'issue de sa suspension.",
+    )
+    if admin_email:
+        _send_email(
+            admin_email,
+            "AidFinder — réactivation automatique d'un compte",
+            f"Le compte de {user.nom} ({user.email}) a été réactivé automatiquement à l'issue de sa suspension.",
+        )
+
+
+def _get_admin_id(admin: Utilisateur) -> int:
+    if admin.administrateur is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le compte administrateur n'est pas associé à un profil administrateur.",
+        )
+    return admin.administrateur.admin_id
+
+
+def send_warning(
+    db: Session,
+    admin: Utilisateur,
+    user_id: int,
+    data: AdminWarningCreate,
+) -> tuple[ActionModeration, bool]:
+    user = _get_user_or_404(db, user_id)
+    if user.role != "utilisateur":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seuls les utilisateurs peuvent être avertis.")
+    if est_suspendu(user.statut_compte):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce compte est déjà suspendu.")
+
+    discussion = (
+        db.query(Discussion)
+        .join(Historique, Discussion.historique_id == Historique.historique_id)
+        .filter(Discussion.discussion_id == data.discussion_id, Historique.user_id == user.user_id)
+        .first()
+    )
+    if discussion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message de conversation introuvable pour cet utilisateur.",
+        )
+
+    now = utc_now()
+    warning = ActionModeration(
+        admin_id=_get_admin_id(admin),
+        user_id=user.user_id,
+        type_action="avertissement",
+        motif=data.motif,
+        message_affiche=discussion.contenu,
+        message_conversation=discussion.contenu,
+        date_creation=now,
+    )
+    user.nombre_avertissements += 1
+    suspension_declenchee = user.nombre_avertissements >= 2
+    if suspension_declenchee:
+        user.statut_compte = SUSPENDU
+        user.date_fin_suspension = now + SUSPENSION_DURATION
+        db.add(
+            ActionModeration(
+                admin_id=warning.admin_id,
+                user_id=user.user_id,
+                type_action="suspension",
+                motif=data.motif,
+                message_affiche=discussion.contenu,
+                message_conversation=discussion.contenu,
+                date_creation=now,
+            )
+        )
+    try:
+        db.add(warning)
+        db.commit()
+        db.refresh(warning)
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise
+
+    _send_warning_email(user, data.motif, discussion.contenu)
+    if suspension_declenchee:
+        _send_suspension_email(user, data.motif, now, user.date_fin_suspension)
+    return warning, suspension_declenchee
+
+
+def list_warnings(db: Session, user_id: int) -> list[ActionModeration]:
+    _get_user_or_404(db, user_id)
+    return (
+        db.query(ActionModeration)
+        .filter(
+            ActionModeration.user_id == user_id,
+            ActionModeration.type_action == "avertissement",
+        )
+        .order_by(desc(ActionModeration.date_creation), desc(ActionModeration.action_id))
+        .all()
+    )
+
+
+def reactivate_expired_suspension(db: Session, user: Utilisateur) -> bool:
+    if (
+        not est_suspendu(user.statut_compte)
+        or user.date_fin_suspension is None
+        or user.date_fin_suspension > utc_now()
+    ):
+        return False
+
+    last_suspension = (
+        db.query(ActionModeration)
+        .filter(
+            ActionModeration.user_id == user.user_id,
+            ActionModeration.type_action == "suspension",
+        )
+        .order_by(desc(ActionModeration.date_creation), desc(ActionModeration.action_id))
+        .first()
+    )
+    user.statut_compte = ACTIF
+    try:
+        if last_suspension is not None:
+            db.add(
+                ActionModeration(
+                    admin_id=last_suspension.admin_id,
+                    user_id=user.user_id,
+                    type_action="reactivation_automatique",
+                    motif="Fin automatique de la période de suspension.",
+                    date_creation=utc_now(),
+                )
+            )
         db.commit()
         db.refresh(user)
-        return user
     except Exception:
         db.rollback()
         raise
 
-
-def activate_user(db: Session, user_id: int) -> Utilisateur:
-    user = _get_user_or_404(db, user_id)
-    try:
-        user.statut_compte = ACTIF
-        user.date_desactivation = None
-        db.commit()
-        db.refresh(user)
-        return user
-    except Exception:
-        db.rollback()
-        raise
+    admin_email = None
+    if last_suspension and last_suspension.administrateur and last_suspension.administrateur.utilisateur:
+        admin_email = last_suspension.administrateur.utilisateur.email
+    _send_reactivation_emails(user, admin_email)
+    return True
 
 
-def deactivate_user(db: Session, user_id: int) -> Utilisateur:
-    user = _get_user_or_404(db, user_id)
-    try:
-        user.statut_compte = SUSPENDU_ADMIN
-        user.date_desactivation = utc_now()
-        db.commit()
-        db.refresh(user)
-        return user
-    except Exception:
-        db.rollback()
-        raise
-
-
-def delete_user(db: Session, user_id: int) -> dict:
-    user = _get_user_or_404(db, user_id)
-    try:
-        db.delete(user)
-        db.commit()
-        return {"message": "Utilisateur supprimé avec succès."}
-    except Exception:
-        db.rollback()
-        raise
+def reactivate_expired_suspensions(db: Session) -> int:
+    suspended_users = (
+        db.query(Utilisateur)
+        .filter(
+            Utilisateur.statut_compte == SUSPENDU,
+            Utilisateur.date_fin_suspension.isnot(None),
+            Utilisateur.date_fin_suspension <= utc_now(),
+        )
+        .all()
+    )
+    return sum(reactivate_expired_suspension(db, user) for user in suspended_users)
 
 
 def list_aides(db: Session) -> list[dict]:
@@ -169,22 +330,6 @@ def create_aide(db: Session, data: AdminAideCreate) -> dict:
     try:
         aide = Aides(**data.model_dump(), derniere_mise_a_jour=utc_now())
         db.add(aide)
-        db.commit()
-        db.refresh(aide)
-        return _serialize_aide(aide)
-    except Exception:
-        db.rollback()
-        raise
-
-
-def update_aide(db: Session, aide_id: int, data: AdminAideUpdate) -> dict:
-    aide = _get_aide_or_404(db, aide_id)
-    values = data.model_dump(exclude_unset=True)
-    _ensure_relations_exist(db, values.get("source_id"), values.get("categorie_id"))
-    try:
-        for key, value in values.items():
-            setattr(aide, key, value)
-        aide.derniere_mise_a_jour = utc_now()
         db.commit()
         db.refresh(aide)
         return _serialize_aide(aide)

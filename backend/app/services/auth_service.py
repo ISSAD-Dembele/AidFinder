@@ -8,10 +8,9 @@ from app.schemas.utilisateur import UserCreate, UserLogin
 from app.core.securite import hash_password, verify_password, create_access_token
 from app.core.statuts_compte import (
     ACTIF,
-    DESACTIVE_UTILISATEUR,
-    est_desactive_par_utilisateur,
-    est_suspendu_par_admin,
+    est_suspendu,
 )
+from app.services.admin_service import reactivate_expired_suspension
 
 
 def _generate_login_response(user: Utilisateur) -> dict:
@@ -60,11 +59,12 @@ def login_user(db: Session, user: UserLogin):
             detail="Email ou mot de passe incorrect"
         )
 
-    # Suspension admin : refus immédiat, non contournable à la connexion
-    if est_suspendu_par_admin(bd_user.statut_compte):
+    reactivate_expired_suspension(db, bd_user)
+
+    if est_suspendu(bd_user.statut_compte):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Votre compte a été suspendu par un administrateur. Contactez le support pour plus d'informations."
+            detail="Votre compte est suspendu jusqu'à la date de réactivation prévue."
         )
 
     if not verify_password(user.password, bd_user.mot_de_passe_hash):
@@ -72,11 +72,6 @@ def login_user(db: Session, user: UserLogin):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect"
         )
-
-    # Pause volontaire : la connexion réactive automatiquement le compte
-    if est_desactive_par_utilisateur(bd_user.statut_compte):
-        bd_user.statut_compte = ACTIF
-        bd_user.date_desactivation = None
 
     try:
         bd_user.date_derniere_connexion = utc_now()
@@ -87,27 +82,3 @@ def login_user(db: Session, user: UserLogin):
         raise
 
     return _generate_login_response(bd_user)
-
-def deactivate_user(db: Session, current_user: Utilisateur):
-    if est_suspendu_par_admin(current_user.statut_compte):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ce compte est suspendu par un administrateur"
-        )
-    if est_desactive_par_utilisateur(current_user.statut_compte):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ce compte est déjà désactivé"
-        )
-
-    # Désactivation volontaire — distincte d'une suspension admin
-    current_user.statut_compte = DESACTIVE_UTILISATEUR
-    try:
-        current_user.date_desactivation = utc_now()
-        db.commit()
-        db.refresh(current_user)
-    except Exception:
-        db.rollback()
-        raise
-        
-    return {"message": "Compte désactivé avec succès"}

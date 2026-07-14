@@ -7,22 +7,19 @@ from app.models.utilisateurs import Utilisateur
 from app.schemas.admin import (
     AdminAideCreate,
     AdminAideResponse,
-    AdminAideUpdate,
     AdminDashboardStatsResponse,
     AdminLogsResponse,
     AdminSourceResponse,
     AdminSourceScrapeResponse,
     AdminStatsResponse,
     AdminUserResponse,
-    AdminUserUpdate,
+    AdminWarningCreate,
+    AdminWarningResponse,
     MessageResponse,
 )
 from app.services.admin_service import (
-    activate_user,
     create_aide,
-    deactivate_user,
     delete_aide,
-    delete_user,
     get_dashboard_stats,
     get_logs,
     get_statistics,
@@ -30,10 +27,10 @@ from app.services.admin_service import (
     list_aides,
     list_sources,
     list_users,
+    list_warnings,
     rerun_source_scraping,
     set_aide_active,
-    update_aide,
-    update_user,
+    send_warning,
 )
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
@@ -64,41 +61,42 @@ def read_user(
     return get_user(db, user_id)
 
 
-@router.put("/utilisateur/{user_id}", response_model=AdminUserResponse)
-def edit_user(
+@router.post("/utilisateur/{user_id}/avertissements", response_model=AdminWarningResponse)
+def create_warning(
     user_id: int,
-    data: AdminUserUpdate,
-    _: Utilisateur = Depends(get_current_admin),
+    data: AdminWarningCreate,
+    admin: Utilisateur = Depends(get_current_admin),
     db: Session = Depends(get_db),
-) -> AdminUserResponse:
-    return update_user(db, user_id, data)
+) -> AdminWarningResponse:
+    warning, suspension_declenchee = send_warning(db, admin, user_id, data)
+    return AdminWarningResponse(
+        action_id=warning.action_id,
+        motif=warning.motif,
+        message_conversation=warning.message_conversation,
+        date_creation=warning.date_creation,
+        nombre_avertissements=warning.utilisateur.nombre_avertissements,
+        suspension_declenchee=suspension_declenchee,
+    )
 
 
-@router.patch("/utilisateur/{user_id}/activer", response_model=AdminUserResponse)
-def enable_user(
-    user_id: int,
-    _: Utilisateur = Depends(get_current_admin),
-    db: Session = Depends(get_db),
-) -> AdminUserResponse:
-    return activate_user(db, user_id)
-
-
-@router.patch("/utilisateur/{user_id}/desactiver", response_model=AdminUserResponse)
-def disable_user(
-    user_id: int,
-    _: Utilisateur = Depends(get_current_admin),
-    db: Session = Depends(get_db),
-) -> AdminUserResponse:
-    return deactivate_user(db, user_id)
-
-
-@router.delete("/utilisateur/{user_id}", response_model=MessageResponse)
-def remove_user(
+@router.get("/utilisateur/{user_id}/avertissements", response_model=list[AdminWarningResponse])
+def read_warnings(
     user_id: int,
     _: Utilisateur = Depends(get_current_admin),
     db: Session = Depends(get_db),
-) -> MessageResponse:
-    return delete_user(db, user_id)
+) -> list[AdminWarningResponse]:
+    warnings = list_warnings(db, user_id)
+    return [
+        AdminWarningResponse(
+            action_id=warning.action_id,
+            motif=warning.motif,
+            message_conversation=warning.message_conversation,
+            date_creation=warning.date_creation,
+            nombre_avertissements=index,
+            suspension_declenchee=index >= 2,
+        )
+        for index, warning in enumerate(reversed(warnings), start=1)
+    ][::-1]
 
 
 @router.get("/aides", response_model=list[AdminAideResponse])
@@ -116,16 +114,6 @@ def add_aide(
     db: Session = Depends(get_db),
 ) -> AdminAideResponse:
     return create_aide(db, data)
-
-
-@router.put("/aides/{aide_id}", response_model=AdminAideResponse)
-def edit_aide(
-    aide_id: int,
-    data: AdminAideUpdate,
-    _: Utilisateur = Depends(get_current_admin),
-    db: Session = Depends(get_db),
-) -> AdminAideResponse:
-    return update_aide(db, aide_id, data)
 
 
 @router.delete("/aides/{aide_id}", response_model=MessageResponse)
