@@ -38,6 +38,18 @@ export const userService = {
     const { data } = await api.patch('/users/me', { photo_profil: null })
     return data
   },
+
+  /** Récupère le thème de l'utilisateur */
+  getTheme: async () => {
+    const { data } = await api.get('/users/me/theme')
+    return data
+  },
+
+  /** Met à jour le thème de l'utilisateur */
+  updateTheme: async (theme) => {
+    const { data } = await api.patch('/users/me/theme', { theme })
+    return data
+  },
 }
 
 /** Construit l'URL complète d'une photo de profil servie par FastAPI */

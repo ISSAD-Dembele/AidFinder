@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext'
 import { ToastProvider } from '@/src/contexts/ToastContext'
+import { ThemeProvider } from '@/src/contexts/ThemeContext'
 import ProtectedRoute from '@/src/components/ProtectedRoute'
 import PublicLayout from '@/src/layouts/PublicLayout'
 import DashboardLayout from '@/src/layouts/DashboardLayout'
@@ -97,9 +98,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <AppRoutes />
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
+      </ThemeProvider>
     </AuthProvider>
   )
 }

@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/src/contexts/AuthContext'
 import { useProfile } from '@/src/contexts/ProfileContext'
 import { useToast } from '@/src/contexts/ToastContext'
+import { useTheme } from '@/src/contexts/ThemeContext'
 import ProfilePhotoCard from '@/src/components/profile/ProfilePhotoCard'
 import ProfileInfoSection from '@/src/components/profile/ProfileInfoSection'
+import ThemeSwitch from '@/src/components/profile/ThemeSwitch'
 import { getApiErrorMessage } from '@/src/utils/errors'
 import { getDashboardBasePath, isAdmin } from '@/src/utils/navigation'
 
@@ -19,6 +21,7 @@ export default function Profile() {
   const { role } = useAuth()
   const { profile, loading, updateProfile, uploadPhoto, deletePhoto } = useProfile()
   const { showToast } = useToast()
+  const { theme } = useTheme()
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [photoError, setPhotoError] = useState('')
@@ -88,6 +91,23 @@ export default function Profile() {
         />
 
         <ProfileInfoSection profile={profile} onSave={updateProfile} />
+
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Thème de l'application</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Choisissez l'apparence de votre interface.
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {theme === 'dark' ? '🌙 Mode sombre' : '🌞 Mode clair'}
+              </span>
+              <ThemeSwitch />
+            </div>
+          </CardContent>
+        </Card>
 
         {adminUser && (
           <Card className="border-border/60 shadow-sm">
