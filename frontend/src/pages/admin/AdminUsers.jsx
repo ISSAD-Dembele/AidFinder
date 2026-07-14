@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Users, Eye, Edit2, UserCheck, UserX, Trash2, Search, RefreshCw, X, Save } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Users, Eye, Search, RefreshCw, X, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import useAdminUsers from '@/src/hooks/useAdminUsers'
 import { AdminTableSkeleton } from '@/src/components/admin/AdminSkeletons'
@@ -8,6 +8,7 @@ import AdminErrorState from '@/src/components/admin/AdminErrorState'
 import { getApiBaseUrl } from '@/src/config/env'
 import { formatLocalDate } from '@/src/utils/date'
 import { useToast } from '@/src/contexts/ToastContext'
+import adminService from '@/src/services/admin'
 
 /* ─────────────────────────────────────────────────────────────── */
 /*  Sub-components                                                  */
@@ -35,17 +36,17 @@ function UserAvatar({ user }) {
 }
 
 function StatusBadge({ status }) {
-  const isActive = status === 'actif'
+  const isSuspended = status === 'suspendu'
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-        isActive
-          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
-          : 'bg-red-50 text-red-700 ring-1 ring-red-600/20'
+        isSuspended
+          ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20'
+          : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
       }`}
     >
-      <span className={`size-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
-      {isActive ? 'Actif' : 'Désactivé'}
+      <span className={`size-1.5 rounded-full ${isSuspended ? 'bg-red-500' : 'bg-emerald-500'}`} />
+      {isSuspended ? 'Suspendu' : 'Actif'}
     </span>
   )
 }
@@ -55,12 +56,39 @@ function StatusBadge({ status }) {
 /* ─────────────────────────────────────────────────────────────── */
 
 function UserDetailModal({ user, onClose }) {
+  const [warnings, setWarnings] = useState([])
+  const [loadingWarnings, setLoadingWarnings] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    const fetchWarnings = async () => {
+      try {
+        const data = await adminService.getUserWarnings(user.user_id)
+        if (active) setWarnings(data)
+      } catch (err) {
+        console.error("Erreur lors de la récupération des avertissements", err)
+      } finally {
+        if (active) setLoadingWarnings(false)
+      }
+    }
+    fetchWarnings()
+    return () => {
+      active = false
+    }
+  }, [user])
+
   if (!user) return null
+
+  const isSuspended = user.statut_compte === 'suspendu'
+  const dateSuspension = isSuspended && user.date_fin_suspension
+    ? new Date(new Date(user.date_fin_suspension).getTime() - 15 * 24 * 60 * 60 * 1000).toISOString()
+    : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -95,6 +123,43 @@ function UserDetailModal({ user, onClose }) {
           ))}
         </div>
 
+        {/* Section Modération */}
+        <div className="border-t border-border/60 pt-4 space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Historique de modération</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg bg-muted/30 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Nombre d'avertissements</p>
+              <p className="mt-0.5 font-semibold text-foreground">{user.nombre_avertissements}</p>
+            </div>
+            <div className="rounded-lg bg-muted/30 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dernier avertissement</p>
+              <p className="mt-0.5 font-semibold text-foreground">
+                {loadingWarnings ? (
+                  <span className="text-xs text-muted-foreground">Chargement...</span>
+                ) : (
+                  warnings[0] ? formatLocalDate(warnings[0].date_creation) : 'Aucun'
+                )}
+              </p>
+            </div>
+            {isSuspended && (
+              <>
+                <div className="rounded-lg bg-red-50 p-3 border border-red-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-red-600">Date de suspension</p>
+                  <p className="mt-0.5 font-semibold text-red-700">
+                    {dateSuspension ? formatLocalDate(dateSuspension) : '—'}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-red-50 p-3 border border-red-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-red-600">Réactivation prévue</p>
+                  <p className="mt-0.5 font-semibold text-red-700">
+                    {user.date_fin_suspension ? formatLocalDate(user.date_fin_suspension) : '—'}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <Button onClick={onClose} className="w-full" variant="outline">Fermer</Button>
       </div>
     </div>
@@ -102,48 +167,30 @@ function UserDetailModal({ user, onClose }) {
 }
 
 /* ─────────────────────────────────────────────────────────────── */
-/*  Modal Modifier                                                  */
+/*  Modal Avertir                                                   */
 /* ─────────────────────────────────────────────────────────────── */
 
-const REGIONS_FR = [
-  'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Bretagne', 'Centre-Val de Loire',
-  'Corse', 'Grand Est', 'Hauts-de-France', 'Île-de-France', 'Normandie',
-  'Nouvelle-Aquitaine', 'Occitanie', 'Pays de la Loire', "Provence-Alpes-Côte d'Azur",
-  'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte',
-]
+function WarningModal({ user, onClose, onConfirm }) {
+  const [motif, setMotif] = useState('')
+  const [discussionId, setDiscussionId] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-const NIVEAUX_ETUDE = [
-  'Sans diplôme', 'CAP/BEP', 'Baccalauréat', 'Bac+2', 'Bac+3', 'Bac+5', 'Doctorat',
-]
-
-const STATUTS_PRO = [
-  'Étudiant', 'Salarié', 'Demandeur d\'emploi', 'Auto-entrepreneur', 'Chef d\'entreprise', 'Retraité', 'Autre',
-]
-
-function EditUserModal({ user, onClose, onSave }) {
   if (!user) return null
-
-  const [form, setForm] = useState({
-    nom: user.nom || '',
-    email: user.email || '',
-    role: user.role || 'utilisateur',
-    statut_compte: user.statut_compte || 'actif',
-    region: user.region || '',
-    niveau_etude: user.niveau_etude || '',
-    statut_socio_pro: user.statut_socio_pro || '',
-  })
-  const [saving, setSaving] = useState(false)
-
-  const handleChange = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setSaving(true)
+    if (!motif.trim() || !discussionId) return
+    setSubmitting(true)
     try {
-      await onSave(user.user_id, form)
+      await onConfirm(user.user_id, {
+        motif: motif.trim(),
+        discussion_id: parseInt(discussionId, 10),
+      })
       onClose()
+    } catch (err) {
+      console.error(err)
     } finally {
-      setSaving(false)
+      setSubmitting(false)
     }
   }
 
@@ -154,89 +201,61 @@ function EditUserModal({ user, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
-          <h2 className="text-lg font-bold text-foreground">Modifier l'utilisateur</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Avertir l'utilisateur</h2>
           <button onClick={onClose} className="rounded-lg p-1 hover:bg-muted/50 text-muted-foreground">
             <X className="size-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            {/* Nom */}
-            <div className="col-span-2 sm:col-span-1">
-              <label className={labelClass}>Nom complet</label>
-              <input className={inputClass} value={form.nom} onChange={handleChange('nom')} required />
-            </div>
+        <div className="rounded-lg bg-yellow-50 border border-yellow-100 p-3 text-xs text-yellow-800">
+          Avertir cet utilisateur entraînera l'envoi d'un e-mail d'avertissement. Au bout de 2 avertissements, le compte sera automatiquement suspendu pour 15 jours.
+        </div>
 
-            {/* Email */}
-            <div className="col-span-2 sm:col-span-1">
-              <label className={labelClass}>Email</label>
-              <input type="email" className={inputClass} value={form.email} onChange={handleChange('email')} required />
-            </div>
+        <div className="space-y-1 text-sm">
+          <p><span className="font-semibold text-muted-foreground">Utilisateur :</span> {user.nom}</p>
+          <p><span className="font-semibold text-muted-foreground">Email :</span> {user.email}</p>
+        </div>
 
-            {/* Rôle */}
-            <div>
-              <label className={labelClass}>Rôle</label>
-              <select className={inputClass} value={form.role} onChange={handleChange('role')}>
-                <option value="utilisateur">Utilisateur</option>
-                <option value="administrateur">Administrateur</option>
-              </select>
-            </div>
-
-            {/* Statut compte */}
-            <div>
-              <label className={labelClass}>Statut du compte</label>
-              <select className={inputClass} value={form.statut_compte} onChange={handleChange('statut_compte')}>
-                <option value="actif">Actif</option>
-                <option value="inactif">Désactivé</option>
-              </select>
-            </div>
-
-            {/* Région */}
-            <div>
-              <label className={labelClass}>Région</label>
-              <select className={inputClass} value={form.region} onChange={handleChange('region')}>
-                <option value="">— Non renseignée —</option>
-                {REGIONS_FR.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-
-            {/* Niveau étude */}
-            <div>
-              <label className={labelClass}>Niveau d'étude</label>
-              <select className={inputClass} value={form.niveau_etude} onChange={handleChange('niveau_etude')}>
-                <option value="">— Non renseigné —</option>
-                {NIVEAUX_ETUDE.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-
-            {/* Statut socio-pro */}
-            <div className="col-span-2">
-              <label className={labelClass}>Statut socioprofessionnel</label>
-              <select className={inputClass} value={form.statut_socio_pro} onChange={handleChange('statut_socio_pro')}>
-                <option value="">— Non renseigné —</option>
-                {STATUTS_PRO.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className={labelClass}>ID de la discussion ayant provoqué l'avertissement *</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={discussionId}
+              onChange={(e) => setDiscussionId(e.target.value)}
+              placeholder="Ex : 12"
+              required
+            />
           </div>
 
-          {/* Actions */}
+          <div>
+            <label className={labelClass}>Motif / Raison de l'avertissement *</label>
+            <textarea
+              className={`${inputClass} resize-none`}
+              rows={3}
+              value={motif}
+              onChange={(e) => setMotif(e.target.value)}
+              placeholder="Renseignez le motif de l'avertissement..."
+              required
+            />
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Annuler
             </Button>
             <Button
               type="submit"
-              disabled={saving}
-              className="gap-2 bg-[#2963E8] hover:bg-[#1e52c7] text-white"
+              disabled={submitting || !motif.trim() || !discussionId}
+              className="gap-2 bg-yellow-600 hover:bg-yellow-700 text-white"
             >
-              {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Enregistrer
+              {submitting && <RefreshCw className="size-4 animate-spin" />}
+              Confirmer
             </Button>
           </div>
         </form>
@@ -250,12 +269,11 @@ function EditUserModal({ user, onClose, onSave }) {
 /* ─────────────────────────────────────────────────────────────── */
 
 export default function AdminUsers() {
-  const { users, loading, error, refresh, activateUser, deactivateUser, deleteUser, updateUser } = useAdminUsers()
+  const { users, loading, error, refresh } = useAdminUsers()
   const { showToast } = useToast()
   const [search, setSearch] = useState('')
   const [viewUser, setViewUser] = useState(null)
-  const [editUser, setEditUser] = useState(null)
-  const [actionLoading, setActionLoading] = useState(null)
+  const [warnUser, setWarnUser] = useState(null)
 
   const filtered = users.filter(
     (u) =>
@@ -263,38 +281,15 @@ export default function AdminUsers() {
       u.email?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const handleAction = async (fn, userId, successMsg) => {
-    setActionLoading(userId)
+  const handleConfirmWarning = async (userId, payload) => {
     try {
-      await fn(userId)
-      if (successMsg) showToast(successMsg, 'success')
-    } catch {
-      showToast('Une erreur est survenue.', 'error')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleDelete = async (userId, nom) => {
-    if (!window.confirm(`Supprimer l'utilisateur "${nom}" ? Cette action est irréversible.`)) return
-    setActionLoading(userId)
-    try {
-      await deleteUser(userId)
-      showToast('Utilisateur supprimé.', 'success')
-    } catch {
-      showToast('Impossible de supprimer cet utilisateur.', 'error')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleSaveEdit = async (userId, payload) => {
-    try {
-      await updateUser(userId, payload)
-      showToast('Utilisateur mis à jour.', 'success')
-    } catch {
-      showToast('Impossible de modifier cet utilisateur.', 'error')
-      throw new Error('update failed')
+      await adminService.createWarning(userId, payload)
+      showToast('Avertissement envoyé avec succès.', 'success')
+      refresh()
+    } catch (err) {
+      const errMsg = err.response?.data?.detail || "Impossible d'envoyer l'avertissement."
+      showToast(errMsg, 'error')
+      throw err
     }
   }
 
@@ -302,11 +297,11 @@ export default function AdminUsers() {
     <div className="flex-1 bg-muted/20 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 space-y-6">
       {/* Modals */}
       {viewUser && <UserDetailModal user={viewUser} onClose={() => setViewUser(null)} />}
-      {editUser && (
-        <EditUserModal
-          user={editUser}
-          onClose={() => setEditUser(null)}
-          onSave={handleSaveEdit}
+      {warnUser && (
+        <WarningModal
+          user={warnUser}
+          onClose={() => setWarnUser(null)}
+          onConfirm={handleConfirmWarning}
         />
       )}
 
@@ -359,6 +354,7 @@ export default function AdminUsers() {
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Utilisateur</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Statut</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avertissements</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inscription</th>
                   <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
                 </tr>
@@ -376,6 +372,7 @@ export default function AdminUsers() {
                     <td className="px-6 py-4">
                       <StatusBadge status={user.statut_compte} />
                     </td>
+                    <td className="px-6 py-4 text-muted-foreground text-sm">{user.nombre_avertissements}</td>
                     <td className="px-6 py-4 text-muted-foreground text-xs">{formatLocalDate(user.date_creation)}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
@@ -389,41 +386,11 @@ export default function AdminUsers() {
                         </Button>
                         <Button
                           variant="ghost" size="icon"
-                          onClick={() => setEditUser(user)}
-                          className="size-8 text-muted-foreground hover:text-violet-600 hover:bg-violet-50"
-                          title="Modifier"
+                          onClick={() => setWarnUser(user)}
+                          className="size-8 text-muted-foreground hover:text-yellow-600 hover:bg-yellow-50"
+                          title="Avertir"
                         >
-                          <Edit2 className="size-4" />
-                        </Button>
-                        {user.statut_compte === 'actif' ? (
-                          <Button
-                            variant="ghost" size="icon"
-                            onClick={() => handleAction(deactivateUser, user.user_id, 'Compte désactivé.')}
-                            disabled={actionLoading === user.user_id}
-                            className="size-8 text-muted-foreground hover:text-orange-600 hover:bg-orange-50"
-                            title="Désactiver"
-                          >
-                            <UserX className="size-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost" size="icon"
-                            onClick={() => handleAction(activateUser, user.user_id, 'Compte activé.')}
-                            disabled={actionLoading === user.user_id}
-                            className="size-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                            title="Activer"
-                          >
-                            <UserCheck className="size-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost" size="icon"
-                          onClick={() => handleDelete(user.user_id, user.nom)}
-                          disabled={actionLoading === user.user_id}
-                          className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="size-4" />
+                          <AlertTriangle className="size-4" />
                         </Button>
                       </div>
                     </td>
@@ -445,7 +412,12 @@ export default function AdminUsers() {
                       <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                     </div>
                   </div>
-                  <StatusBadge status={user.statut_compte} />
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={user.statut_compte} />
+                    <span className="text-[10px] text-muted-foreground">
+                      {user.nombre_avertissements} {user.nombre_avertissements > 1 ? 'avertissements' : 'avertissement'}
+                    </span>
+                  </div>
                 </div>
 
                 <p className="text-xs text-muted-foreground">Inscrit le {formatLocalDate(user.date_creation)}</p>
@@ -454,20 +426,8 @@ export default function AdminUsers() {
                   <Button variant="ghost" size="icon" onClick={() => setViewUser(user)} className="size-8 hover:text-[#2963E8]">
                     <Eye className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setEditUser(user)} className="size-8 hover:text-violet-600">
-                    <Edit2 className="size-4" />
-                  </Button>
-                  {user.statut_compte === 'actif' ? (
-                    <Button variant="ghost" size="icon" onClick={() => handleAction(deactivateUser, user.user_id, 'Compte désactivé.')} disabled={actionLoading === user.user_id} className="size-8 hover:text-orange-600">
-                      <UserX className="size-4" />
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" size="icon" onClick={() => handleAction(activateUser, user.user_id, 'Compte activé.')} disabled={actionLoading === user.user_id} className="size-8 hover:text-emerald-600">
-                      <UserCheck className="size-4" />
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(user.user_id, user.nom)} disabled={actionLoading === user.user_id} className="size-8 hover:text-destructive">
-                    <Trash2 className="size-4" />
+                  <Button variant="ghost" size="icon" onClick={() => setWarnUser(user)} className="size-8 hover:text-yellow-600">
+                    <AlertTriangle className="size-4" />
                   </Button>
                 </div>
               </div>

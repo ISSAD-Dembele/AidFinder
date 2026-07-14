@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, FileText, BarChart2, UserCircle, LogOut, ShieldOff } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, BarChart2, UserCircle, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/src/components/Logo'
 import SidebarNavItem from '@/src/components/dashboard/SidebarNavItem'
@@ -14,7 +14,7 @@ const NAV_LINKS = [
 ]
 
 /** Sidebar du dashboard administrateur */
-export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavigate }) {
+export default function AdminSidebar({ basePath = '/admin', onNavigate }) {
   const { logout } = useAuth()
   const navigate = useNavigate()
 
@@ -22,11 +22,6 @@ export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavi
     logout()
     onNavigate?.()
     navigate('/')
-  }
-
-  const handleDeactivate = () => {
-    onDeactivate?.()
-    onNavigate?.()
   }
 
   return (
@@ -65,18 +60,7 @@ export default function AdminSidebar({ basePath = '/admin', onDeactivate, onNavi
           Déconnexion
         </button>
 
-        {/* Désactivation du compte */}
-        <button
-          type="button"
-          onClick={handleDeactivate}
-          className={cn(
-            'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm text-red-400/80',
-            'transition-all duration-200 hover:bg-red-500/10 hover:text-red-400'
-          )}
-        >
-          <ShieldOff className="size-4 shrink-0" />
-          Désactiver mon compte
-        </button>
+
       </div>
     </div>
   )

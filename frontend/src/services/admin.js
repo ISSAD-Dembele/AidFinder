@@ -41,6 +41,16 @@ export const adminService = {
     return data
   },
 
+  getUserWarnings: async (userId) => {
+    const { data } = await api.get(`/admin/utilisateur/${userId}/avertissements`)
+    return data
+  },
+
+  createWarning: async (userId, payload) => {
+    const { data } = await api.post(`/admin/utilisateur/${userId}/avertissements`, payload)
+    return data
+  },
+
   // ─── Aides ───────────────────────────────────────────────────────────────────
   getAides: async () => {
     const { data } = await api.get('/admin/aides')

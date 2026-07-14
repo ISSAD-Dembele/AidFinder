@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
-  FileText, Search, RefreshCw, Edit2, Trash2, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Plus, X, Save,
+  FileText, Search, RefreshCw, Trash2,
+  ChevronLeft, ChevronRight, Plus, X, Save, Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import useAdminAides from '@/src/hooks/useAdminAides'
@@ -60,7 +60,7 @@ const REGIONS_FR = [
   'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte', 'National',
 ]
 
-function AideFormModal({ aide, onClose, onSave, creating = false }) {
+function AideFormModal({ aide, onClose, onSave, creating = false, viewOnly = false }) {
   const [form, setForm] = useState(
     aide
       ? {
@@ -84,12 +84,14 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
   const [saving, setSaving] = useState(false)
 
   const set = (field) => (e) => {
+    if (viewOnly) return
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value
     setForm((prev) => ({ ...prev, [field]: val }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (viewOnly) return
     setSaving(true)
     try {
       // Nettoyage : convertir les champs numériques
@@ -121,7 +123,7 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
         {/* Header fixe */}
         <div className="flex items-center justify-between border-b border-border/60 px-6 py-4 shrink-0">
           <h2 className="text-lg font-bold text-foreground">
-            {creating ? 'Créer une aide' : 'Modifier l\'aide'}
+            {creating ? 'Créer une aide' : (viewOnly ? "Détails de l'aide" : 'Modifier l\'aide')}
           </h2>
           <button onClick={onClose} className="rounded-lg p-1 hover:bg-muted/50 text-muted-foreground">
             <X className="size-4" />
@@ -135,7 +137,7 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
               {/* Titre */}
               <div className="col-span-2">
                 <label className={labelClass}>Titre *</label>
-                <input className={inputClass} value={form.titre} onChange={set('titre')} required placeholder="Nom de l'aide" />
+                <input className={inputClass} value={form.titre} onChange={set('titre')} required placeholder="Nom de l'aide" disabled={viewOnly} />
               </div>
 
               {/* Description */}
@@ -147,19 +149,20 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
                   value={form.description}
                   onChange={set('description')}
                   placeholder="Description de l'aide..."
+                  disabled={viewOnly}
                 />
               </div>
 
               {/* Type d'aide */}
               <div>
                 <label className={labelClass}>Type d'aide</label>
-                <input className={inputClass} value={form.type_aide} onChange={set('type_aide')} placeholder="Ex : Bourse, Subvention..." />
+                <input className={inputClass} value={form.type_aide} onChange={set('type_aide')} placeholder="Ex : Bourse, Subvention..." disabled={viewOnly} />
               </div>
 
               {/* Région */}
               <div>
                 <label className={labelClass}>Région cible</label>
-                <select className={inputClass} value={form.region_cible} onChange={set('region_cible')}>
+                <select className={inputClass} value={form.region_cible} onChange={set('region_cible')} disabled={viewOnly}>
                   <option value="">— Toutes régions —</option>
                   {REGIONS_FR.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -168,55 +171,55 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
               {/* Montant */}
               <div>
                 <label className={labelClass}>Montant (€)</label>
-                <input type="number" min={0} step={0.01} className={inputClass} value={form.montant} onChange={set('montant')} placeholder="0.00" />
+                <input type="number" min={0} step={0.01} className={inputClass} value={form.montant} onChange={set('montant')} placeholder="0.00" disabled={viewOnly} />
               </div>
 
               {/* Âge min */}
               <div>
                 <label className={labelClass}>Âge minimum</label>
-                <input type="number" min={0} max={120} className={inputClass} value={form.age_min} onChange={set('age_min')} placeholder="0" />
+                <input type="number" min={0} max={120} className={inputClass} value={form.age_min} onChange={set('age_min')} placeholder="0" disabled={viewOnly} />
               </div>
 
               {/* Âge max */}
               <div>
                 <label className={labelClass}>Âge maximum</label>
-                <input type="number" min={0} max={120} className={inputClass} value={form.age_max} onChange={set('age_max')} placeholder="99" />
+                <input type="number" min={0} max={120} className={inputClass} value={form.age_max} onChange={set('age_max')} placeholder="99" disabled={viewOnly} />
               </div>
 
               {/* Niveau étude */}
               <div>
                 <label className={labelClass}>Niveau d'étude requis</label>
-                <input className={inputClass} value={form.niveau_etude_requis} onChange={set('niveau_etude_requis')} placeholder="Ex : Bac+2, Doctorat..." />
+                <input className={inputClass} value={form.niveau_etude_requis} onChange={set('niveau_etude_requis')} placeholder="Ex : Bac+2, Doctorat..." disabled={viewOnly} />
               </div>
 
               {/* Statut socio-pro */}
               <div>
                 <label className={labelClass}>Statut socioprofessionnel requis</label>
-                <input className={inputClass} value={form.statut_socio_pro_requis} onChange={set('statut_socio_pro_requis')} placeholder="Ex : Étudiant, Salarié..." />
+                <input className={inputClass} value={form.statut_socio_pro_requis} onChange={set('statut_socio_pro_requis')} placeholder="Ex : Étudiant, Salarié..." disabled={viewOnly} />
               </div>
 
               {/* Source ID */}
               <div>
                 <label className={labelClass}>ID Source</label>
-                <input type="number" min={1} className={inputClass} value={form.source_id} onChange={set('source_id')} placeholder="1" />
+                <input type="number" min={1} className={inputClass} value={form.source_id} onChange={set('source_id')} placeholder="1" disabled={viewOnly} />
               </div>
 
               {/* Catégorie ID */}
               <div>
                 <label className={labelClass}>ID Catégorie</label>
-                <input type="number" min={1} className={inputClass} value={form.categorie_id} onChange={set('categorie_id')} placeholder="1" />
+                <input type="number" min={1} className={inputClass} value={form.categorie_id} onChange={set('categorie_id')} placeholder="1" disabled={viewOnly} />
               </div>
 
               {/* URL officielle */}
               <div className="col-span-2">
                 <label className={labelClass}>URL officielle</label>
-                <input type="url" className={inputClass} value={form.url_officielle} onChange={set('url_officielle')} placeholder="https://..." />
+                <input type="url" className={inputClass} value={form.url_officielle} onChange={set('url_officielle')} placeholder="https://..." disabled={viewOnly} />
               </div>
 
               {/* Image URL */}
               <div className="col-span-2">
                 <label className={labelClass}>URL de l'image</label>
-                <input type="url" className={inputClass} value={form.image_url} onChange={set('image_url')} placeholder="https://..." />
+                <input type="url" className={inputClass} value={form.image_url} onChange={set('image_url')} placeholder="https://..." disabled={viewOnly} />
               </div>
 
               {/* Statut actif */}
@@ -227,6 +230,7 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
                   checked={form.est_active}
                   onChange={set('est_active')}
                   className="size-4 rounded border-border accent-[#2963E8]"
+                  disabled={viewOnly}
                 />
                 <label htmlFor="est_active" className="text-sm text-foreground cursor-pointer">
                   Aide active (visible dans les recommandations)
@@ -237,17 +241,25 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
 
           {/* Footer fixe */}
           <div className="border-t border-border/60 px-6 py-4 flex justify-end gap-3 shrink-0">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-              Annuler
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving}
-              className="gap-2 bg-[#2963E8] hover:bg-[#1e52c7] text-white"
-            >
-              {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-              {creating ? 'Créer' : 'Enregistrer'}
-            </Button>
+            {viewOnly ? (
+              <Button type="button" onClick={onClose} className="bg-[#2963E8] hover:bg-[#1e52c7] text-white">
+                Fermer
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+                  Annuler
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="gap-2 bg-[#2963E8] hover:bg-[#1e52c7] text-white"
+                >
+                  {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  {creating ? 'Créer' : 'Enregistrer'}
+                </Button>
+              </>
+            )}
           </div>
         </form>
       </div>
@@ -260,14 +272,14 @@ function AideFormModal({ aide, onClose, onSave, creating = false }) {
 /* ─────────────────────────────────────────────────────────────── */
 
 export default function AdminAides() {
-  const { aides, loading, error, refresh, activateAide, deactivateAide, deleteAide, updateAide, createAide } = useAdminAides()
+  const { aides, loading, error, refresh, deleteAide, createAide } = useAdminAides()
   const { showToast } = useToast()
   const [search, setSearch] = useState('')
   const [filterCategorie, setFilterCategorie] = useState('')
   const [filterRegion, setFilterRegion] = useState('')
   const [page, setPage] = useState(1)
   const [actionLoading, setActionLoading] = useState(null)
-  const [editAide, setEditAide] = useState(null)
+  const [viewAide, setViewAide] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
 
   const categories = useMemo(() => {
@@ -295,23 +307,6 @@ export default function AdminAides() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  const handleToggleActive = async (aide) => {
-    setActionLoading(aide.aide_id)
-    try {
-      if (aide.est_active !== false) {
-        await deactivateAide(aide.aide_id)
-        showToast('Aide désactivée.', 'success')
-      } else {
-        await activateAide(aide.aide_id)
-        showToast('Aide activée.', 'success')
-      }
-    } catch {
-      showToast('Une erreur est survenue.', 'error')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
   const handleDelete = async (aide) => {
     if (!window.confirm(`Supprimer l'aide "${aide.titre}" ? Cette action est irréversible.`)) return
     setActionLoading(aide.aide_id)
@@ -322,16 +317,6 @@ export default function AdminAides() {
       showToast('Impossible de supprimer cette aide.', 'error')
     } finally {
       setActionLoading(null)
-    }
-  }
-
-  const handleSaveEdit = async (payload) => {
-    try {
-      await updateAide(editAide.aide_id, payload)
-      showToast('Aide mise à jour.', 'success')
-    } catch {
-      showToast('Impossible de modifier cette aide.', 'error')
-      throw new Error('update failed')
     }
   }
 
@@ -348,11 +333,11 @@ export default function AdminAides() {
   return (
     <div className="flex-1 bg-muted/20 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 space-y-6">
       {/* Modals */}
-      {editAide && (
+      {viewAide && (
         <AideFormModal
-          aide={editAide}
-          onClose={() => setEditAide(null)}
-          onSave={handleSaveEdit}
+          aide={viewAide}
+          onClose={() => setViewAide(null)}
+          viewOnly
         />
       )}
       {showCreate && (
@@ -480,33 +465,12 @@ export default function AdminAides() {
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost" size="icon"
-                            onClick={() => setEditAide(aide)}
-                            className="size-8 text-muted-foreground hover:text-violet-600 hover:bg-violet-50"
-                            title="Modifier"
+                            onClick={() => setViewAide(aide)}
+                            className="size-8 text-muted-foreground hover:text-[#2963E8] hover:bg-[#2963E8]/10"
+                            title="Voir"
                           >
-                            <Edit2 className="size-4" />
+                            <Eye className="size-4" />
                           </Button>
-                          {aide.est_active !== false ? (
-                            <Button
-                              variant="ghost" size="icon"
-                              onClick={() => handleToggleActive(aide)}
-                              disabled={actionLoading === aide.aide_id}
-                              className="size-8 hover:text-orange-600 hover:bg-orange-50"
-                              title="Désactiver"
-                            >
-                              <XCircle className="size-4" />
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost" size="icon"
-                              onClick={() => handleToggleActive(aide)}
-                              disabled={actionLoading === aide.aide_id}
-                              className="size-8 hover:text-emerald-600 hover:bg-emerald-50"
-                              title="Activer"
-                            >
-                              <CheckCircle className="size-4" />
-                            </Button>
-                          )}
                           <Button
                             variant="ghost" size="icon"
                             onClick={() => handleDelete(aide)}
@@ -550,18 +514,9 @@ export default function AdminAides() {
                     </div>
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditAide(aide)} className="text-violet-600 border-violet-200 hover:bg-violet-50 text-xs gap-1">
-                      <Edit2 className="size-3" /> Modifier
+                    <Button variant="outline" size="sm" onClick={() => setViewAide(aide)} className="text-[#2963E8] border-[#2963E8]/20 hover:bg-[#2963E8]/10 text-xs gap-1">
+                      <Eye className="size-3" /> Voir
                     </Button>
-                    {aide.est_active !== false ? (
-                      <Button variant="outline" size="sm" onClick={() => handleToggleActive(aide)} disabled={actionLoading === aide.aide_id} className="text-orange-600 border-orange-200 hover:bg-orange-50 text-xs">
-                        Désactiver
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => handleToggleActive(aide)} disabled={actionLoading === aide.aide_id} className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 text-xs">
-                        Activer
-                      </Button>
-                    )}
                     <Button variant="outline" size="sm" onClick={() => handleDelete(aide)} disabled={actionLoading === aide.aide_id} className="text-destructive border-red-200 hover:bg-red-50 text-xs">
                       Supprimer
                     </Button>
