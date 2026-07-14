@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.utilisateurs import Utilisateur
-from app.schemas.utilisateur import (UserProfileUpdate, ChangePassword)
+from app.schemas.utilisateur import UserProfileUpdate, ChangePassword, ThemeUpdate
 from app.core.securite import verify_password, hash_password
 from fastapi import HTTPException, status
 
@@ -9,6 +9,22 @@ import shutil, os
 
 def get_user_profile(current_user: Utilisateur):
     return current_user
+
+
+def get_user_theme(current_user: Utilisateur) -> dict:
+    return {"theme": current_user.theme}
+
+
+def update_user_theme(db: Session, current_user: Utilisateur, data: ThemeUpdate) -> dict:
+    try:
+        current_user.theme = data.theme
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
+
+    return {"theme": current_user.theme}
 
 def update_user_profile(db: Session, current_user: Utilisateur, data: UserProfileUpdate):
     update_data = data.model_dump(exclude_unset=True)

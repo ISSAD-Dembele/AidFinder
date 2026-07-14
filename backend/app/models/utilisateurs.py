@@ -11,6 +11,7 @@ class Utilisateur(Base):
     mot_de_passe_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)
     statut_compte = Column(String, nullable=False)  # actif | suspendu
+    theme = Column(String, nullable=False, default="light", server_default="light")
     nombre_avertissements = Column(Integer, nullable=False, default=0)
     date_fin_suspension = Column(DateTime(timezone=True), nullable=True)
     date_naissance = Column(Date)

@@ -57,6 +57,7 @@ def ensure_runtime_columns():
         "ALTER TABLE aides ADD COLUMN IF NOT EXISTS est_active BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville VARCHAR",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_derniere_connexion TIMESTAMP NULL",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS theme VARCHAR NOT NULL DEFAULT 'light'",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nombre_avertissements INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS date_fin_suspension TIMESTAMPTZ NULL",
         "ALTER TABLE historiques ADD COLUMN IF NOT EXISTS conversation_meta TEXT",

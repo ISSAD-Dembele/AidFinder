@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from typing import Literal
 from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer
 
 from app.core.datetime_utils import as_utc
@@ -20,6 +21,14 @@ class MessageResponse(BaseModel):
 class UploadPhotoResponse(BaseModel):
     message: str
     photo_profil: str
+
+
+class ThemeResponse(BaseModel):
+    theme: Literal["light", "dark"]
+
+
+class ThemeUpdate(BaseModel):
+    theme: Literal["light", "dark"]
 
 class UserProfileUpdate(BaseModel):
     nom: str | None = None
