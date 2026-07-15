@@ -24,6 +24,7 @@ import requests
 import re
 import json
 import html as html_module
+import time
 
 
 # ── Constantes ─────────────────────────────────────────────────
@@ -43,6 +44,47 @@ _HEADERS = {
         "Chrome/137.0.0.0 Safari/537.36"
     ),
 }
+
+_SESSION = None
+
+
+def _get_session() -> requests.Session:
+    """Retourne une session requests persistante (réutilisée).
+
+    Les headers User-Agent et les cookies sont conservés
+    automatiquement entre les requêtes.
+    """
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+        _SESSION.headers.update(_HEADERS)
+    return _SESSION
+
+
+# Erreurs réseau considérées comme temporaires → retry possible
+_RETRYABLE_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ReadTimeout,
+    requests.exceptions.ConnectTimeout,
+    ConnectionResetError,
+    ConnectionRefusedError,
+    ConnectionAbortedError,
+    ConnectionError,
+)
+
+# Délais entre chaque tentative (exponentiel : 2s, 4s, 8s, 16s)
+_RETRY_DELAYS = [2, 4, 8, 16]
+
+# Mots-clés dans le message d'erreur indiquant une panne réseau
+_RETRYABLE_KEYWORDS = [
+    "network is down",
+    "temporary failure",
+    "connection reset",
+    "connection refused",
+    "name or service not known",
+    "no route to host",
+]
 
 
 def _extract_wire_snapshot(html_text: str) -> dict | None:
@@ -152,11 +194,15 @@ def _fetch_page(
     component_id: str,
     snapshot_str: str,
     update_uri: str,
+    session: requests.Session | None = None,
 ) -> dict | None:
     """Récupère une page d'offres via l'API Livewire 3.
 
-    Utilise le snapshot brut exact de la page précédente pour
-    maintenir l'état du composant Livewire.
+    Effectue jusqu'à 5 tentatives avec backoff exponentiel (2s, 4s, 8s, 16s)
+    pour les erreurs réseau temporaires (ConnectionError, Timeout, etc.).
+
+    Utilise la session requests persistante (si fournie) pour conserver
+    les headers Livewire et les cookies entre les pages.
     """
     headers = {
         "User-Agent": _HEADERS["User-Agent"],
@@ -185,23 +231,66 @@ def _fetch_page(
         ],
     }
 
-    try:
-        response = requests.post(
-            update_uri,
-            json=payload,
-            headers=headers,
-            cookies=cookies,
-            timeout=15,
-        )
-        if response.status_code == 419:
-            log_scraping_error(f"anapec_emploi_livewire_page_{page}",
-                               f"419 CSRF mismatch")
+    http = session if session else requests
+
+    for attempt in range(1, 6):  # 5 tentatives max
+        if attempt > 1:
+            delay = _RETRY_DELAYS[attempt - 2]
+            print(f"  Erreur réseau. Nouvelle tentative dans {delay} secondes.")
+            time.sleep(delay)
+
+        print(f"  Tentative {attempt}/5")
+        try:
+            response = http.post(
+                update_uri,
+                json=payload,
+                headers=headers,
+                cookies=cookies,
+                timeout=15,
+            )
+            if response.status_code == 419:
+                log_scraping_error(
+                    f"anapec_emploi_livewire_page_{page}",
+                    "419 CSRF mismatch",
+                )
+                return None
+            response.raise_for_status()
+            # Succès après une ou plusieurs tentatives
+            if attempt > 1:
+                print(f"  Connexion rétablie.")
+            return response.json()
+
+        except _RETRYABLE_ERRORS:
+            log_scraping_error(
+                f"anapec_emploi_livewire_page_{page}_attempt_{attempt}",
+                "Erreur réseau (retryable)",
+            )
+            if attempt == 5:
+                print(f"  Abandon de la page {page} après 5 tentatives.")
+                return None
+            continue  # Nouvelle tentative
+
+        except requests.exceptions.RequestException as e:
+            error_msg = str(e).lower()
+            is_retryable = any(kw in error_msg for kw in _RETRYABLE_KEYWORDS)
+            if is_retryable and attempt < 5:
+                # Erreur avec mot-clé réseau, on retente
+                continue
+            # Erreur HTTP non retryable (4xx, 5xx classique…) → abandon
+            log_scraping_error(
+                f"anapec_emploi_livewire_page_{page}",
+                str(e),
+            )
             return None
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        log_scraping_error(f"anapec_emploi_livewire_page_{page}", str(e))
-        return None
+
+        except Exception as e:
+            log_scraping_error(
+                f"anapec_emploi_livewire_page_{page}",
+                str(e),
+            )
+            return None
+
+    return None
 
 
 def fetch_listings() -> list[dict]:
@@ -215,8 +304,9 @@ def fetch_listings() -> list[dict]:
 
     # ── 1. Page initiale ──────────────────────────────────────
     print(f"[ANAPEC-EMPLOI] Téléchargement de {START_URL}")
+    session = _get_session()
     try:
-        response = requests.get(START_URL, headers=_HEADERS, timeout=15)
+        response = session.get(START_URL, timeout=15)
         response.raise_for_status()
         html_text = response.text
         cookies = response.cookies
@@ -268,12 +358,12 @@ def fetch_listings() -> list[dict]:
 
         print(f"[ANAPEC-EMPLOI] Page {page}/{total_pages}...")
         livewire_data = _fetch_page(
-            page, csrf_token, cookies, component_id, current_snapshot_str, update_uri
+            page, csrf_token, cookies, component_id, current_snapshot_str, update_uri, session
         )
 
         if not livewire_data:
-            print(f"[ANAPEC-EMPLOI] Échec page {page}, arrêt.")
-            break
+            print(f"[ANAPEC-EMPLOI] Page {page} impossible après 5 tentatives.")
+            continue
 
         # Extraire le nouveau snapshot brut de la réponse
         new_raw = _extract_raw_snapshot_from_response(livewire_data)
