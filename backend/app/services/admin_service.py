@@ -24,6 +24,7 @@ from app.models.consultation_aide import ConsultationAide
 from app.models.discussion import Discussion
 from app.models.export_pdf import ExportPDF
 from app.models.historique import Historique
+from app.models.notification import Notification
 from app.models.scraping_logs import ScrapingLog
 from app.models.source_aide import SourceAide
 from app.models.utilisateurs import Utilisateur
@@ -247,8 +248,24 @@ def send_warning(
         raise
 
     _send_warning_email(user, data.motif, discussion.contenu)
+    
+    # Créer une notification pour l'utilisateur
     if suspension_declenchee:
+        notification_title = "Compte suspendu"
+        notification_message = f"Votre compte a été suspendu pour 15 jours suite à un deuxième avertissement. Motif : {data.motif}"
         _send_suspension_email(user, data.motif, now, user.date_fin_suspension)
+    else:
+        notification_title = "Avertissement reçu"
+        notification_message = f"Vous avez reçu un avertissement. Motif : {data.motif}. Un nouvel avertissement entraînera la suspension de votre compte."
+    
+    user_notification = Notification(
+        user_id=user.user_id,
+        titre=notification_title,
+        message=notification_message,
+    )
+    db.add(user_notification)
+    db.commit()
+    
     return warning, suspension_declenchee
 
 
@@ -304,6 +321,27 @@ def reactivate_expired_suspension(db: Session, user: Utilisateur) -> bool:
     if last_suspension and last_suspension.administrateur and last_suspension.administrateur.utilisateur:
         admin_email = last_suspension.administrateur.utilisateur.email
     _send_reactivation_emails(user, admin_email)
+    
+    # Créer des notifications pour l'utilisateur et l'admin
+    user_notification = Notification(
+        user_id=user.user_id,
+        titre="Compte réactivé",
+        message="Votre compte a été réactivé automatiquement à l'issue de sa suspension.",
+    )
+    db.add(user_notification)
+    
+    if admin_email:
+        # Trouver l'utilisateur admin correspondant
+        admin_user = db.query(Utilisateur).filter(Utilisateur.email == admin_email).first()
+        if admin_user:
+            admin_notification = Notification(
+                user_id=admin_user.user_id,
+                titre="Réactivation automatique",
+                message=f"Le compte de {user.nom} ({user.email}) a été réactivé automatiquement.",
+            )
+            db.add(admin_notification)
+    
+    db.commit()
     return True
 
 

@@ -69,6 +69,8 @@ def ensure_runtime_columns():
             date_fin_suspension = COALESCE(date_fin_suspension, date_desactivation + INTERVAL '15 days', NOW())
         WHERE statut_compte = 'suspendu_admin'
         """,
+        "ALTER TABLE utilisateurs ALTER COLUMN statut_compte SET DEFAULT 'actif'",
+        "UPDATE utilisateurs SET statut_compte = 'actif', nombre_avertissements = 0, date_fin_suspension = NULL WHERE statut_compte = 'suspendu' AND nombre_avertissements = 0 AND date_fin_suspension IS NULL",
     )
     utc_datetime_columns = (
         ("utilisateurs", "date_creation"),
