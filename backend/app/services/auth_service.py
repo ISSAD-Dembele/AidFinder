@@ -8,6 +8,7 @@ from app.schemas.utilisateur import UserCreate, UserLogin
 from app.core.securite import hash_password, verify_password, create_access_token
 from app.core.statuts_compte import (
     ACTIF,
+    DESACTIVE_UTILISATEUR,
     est_suspendu,
 )
 from app.services.admin_service import reactivate_expired_suspension
@@ -82,3 +83,26 @@ def login_user(db: Session, user: UserLogin):
         raise
 
     return _generate_login_response(bd_user)
+
+
+def deactivate_user_account(db: Session, current_user: Utilisateur):
+    """
+    Désactive le compte de l'utilisateur connecté.
+    Met à jour le statut_compte à 'desactive_utilisateur' et la date de désactivation.
+    """
+    if current_user.role == "administrateur":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Les administrateurs ne peuvent pas désactiver leur propre compte via cette route."
+        )
+
+    try:
+        current_user.statut_compte = DESACTIVE_UTILISATEUR
+        current_user.date_desactivation = utc_now()
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise
+
+    return {"message": "Compte désactivé avec succès."}

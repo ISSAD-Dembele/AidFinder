@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,13 +18,14 @@ import { getDashboardBasePath, isAdmin } from '@/src/utils/navigation'
  * Le contenu s'adapte automatiquement selon profile.role.
  */
 export default function Profile() {
-  const { role } = useAuth()
+  const { role, deactivateAccount } = useAuth()
   const { profile, loading, updateProfile, uploadPhoto, deletePhoto } = useProfile()
   const { showToast } = useToast()
   const { theme } = useTheme()
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [photoError, setPhotoError] = useState('')
+  const [deactivating, setDeactivating] = useState(false)
 
   const effectiveRole = role ?? profile?.role
   const basePath = getDashboardBasePath(effectiveRole)
@@ -53,6 +54,24 @@ export default function Profile() {
       setPhotoError(getApiErrorMessage(err, 'Impossible de supprimer la photo.'))
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleDeactivateAccount = async () => {
+    if (!window.confirm(
+      'Êtes-vous sûr de vouloir désactiver votre compte ?\n\nCette action est irréversible. Vous ne pourrez plus accéder à votre compte.'
+    )) {
+      return
+    }
+
+    setDeactivating(true)
+    try {
+      await deactivateAccount()
+      showToast('Votre compte a été désactivé avec succès.')
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Impossible de désactiver le compte.'), 'error')
+    } finally {
+      setDeactivating(false)
     }
   }
 
@@ -140,6 +159,33 @@ export default function Profile() {
             </Button>
           </CardContent>
         </Card>
+
+        {!adminUser && (
+          <Card className="border-destructive/60 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-destructive">Zone de danger</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-destructive/10 p-4">
+                <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-destructive">Désactiver mon compte</p>
+                  <p className="text-xs text-destructive/80">
+                    Cette action est irréversible. Vous ne pourrez plus accéder à votre compte.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto"
+                onClick={handleDeactivateAccount}
+                disabled={deactivating}
+              >
+                {deactivating ? 'Désactivation...' : 'Désactiver mon compte'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
