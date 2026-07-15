@@ -70,7 +70,7 @@ def ensure_runtime_columns():
         WHERE statut_compte = 'suspendu_admin'
         """,
         "ALTER TABLE utilisateurs ALTER COLUMN statut_compte SET DEFAULT 'actif'",
-        "UPDATE utilisateurs SET statut_compte = 'actif', nombre_avertissements = 0, date_fin_suspension = NULL WHERE statut_compte = 'suspendu' AND nombre_avertissements = 0 AND date_fin_suspension IS NULL",
+        "UPDATE utilisateurs u SET statut_compte = 'actif', nombre_avertissements = 0, date_fin_suspension = NULL WHERE u.statut_compte = 'suspendu' AND u.nombre_avertissements = 0 AND NOT EXISTS (SELECT 1 FROM actions_moderations am WHERE am.user_id = u.user_id)",
     )
     utc_datetime_columns = (
         ("utilisateurs", "date_creation"),
